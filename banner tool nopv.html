@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>回遊バナー解析ツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans",Arial,sans-serif;background:#f0f2f7;min-height:100vh}
+.wrap{max-width:900px;margin:0 auto;padding:16px}
+
+/* ヘッダー */
+.header{background:#1F3864;color:#fff;border-radius:14px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px}
+.header h1{font-size:17px;font-weight:700;line-height:1.3}
+.header p{font-size:11px;opacity:.7;margin-top:2px}
+
+/* ドロップゾーン */
+.dropzone{background:#fff;border:2px dashed #b0bec5;border-radius:14px;padding:40px 20px;text-align:center;cursor:pointer;transition:.15s;margin-bottom:16px;position:relative}
+.dropzone:hover,.dropzone.drag{border-color:#378ADD;background:#e8f4ff}
+.dropzone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dropzone .icon{font-size:48px;margin-bottom:12px}
+.dropzone .title{font-size:16px;font-weight:600;color:#1F3864;margin-bottom:6px}
+.dropzone .sub{font-size:12px;color:#888}
+.btn-upload{display:inline-block;margin-top:16px;background:#1F3864;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-size:14px;font-weight:600;cursor:pointer}
+
+/* ローディング */
+.loading{display:none;text-align:center;padding:40px;background:#fff;border-radius:14px;margin-bottom:16px}
+.loading .spinner{font-size:36px;animation:spin 1s linear infinite;display:block;margin-bottom:12px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* エラー */
+.error{display:none;background:#FCEBEB;border:1px solid #F09595;border-radius:10px;padding:14px 16px;color:#A32D2D;font-size:13px;margin-bottom:12px;line-height:1.6}
+
+/* サマリー */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.stat{background:#fff;border-radius:10px;padding:12px 6px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.stat-label{font-size:10px;color:#888;margin-bottom:3px}
+.stat-val{font-size:22px;font-weight:700}
+
+/* ツールバー */
+.toolbar{background:#fff;border-radius:10px;padding:12px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+#searchBox{width:100%;font-size:14px;padding:9px 12px;border-radius:8px;border:1px solid #ddd;margin-bottom:8px;outline:none}
+#searchBox:focus{border-color:#378ADD}
+.filters{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.filters button{font-size:12px;padding:7px 13px;border-radius:6px;cursor:pointer;font-weight:500;border:1px solid #ccc;background:#fff;color:#333;transition:.1s}
+.filters button.active{background:#1F3864;color:#fff;border-color:#1F3864}
+.btn-csv{margin-left:auto;font-size:12px;padding:7px 14px;border-radius:6px;cursor:pointer;font-weight:600;background:#1F3864;color:#fff;border:none}
+.btn-reset{font-size:12px;padding:7px 12px;border-radius:6px;cursor:pointer;background:#fff;border:1px solid #ccc;color:#555}
+
+/* カード */
+#count{font-size:12px;color:#888;margin-bottom:8px}
+.card{background:#fff;border-radius:10px;border:0.5px solid #e0e0e0;border-left-width:3px;margin-bottom:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.card-header{padding:11px 14px;cursor:pointer;display:flex;align-items:flex-start;gap:8px;user-select:none}
+.card-header:active{background:#f8f8f8}
+.item-no{font-size:12px;font-weight:700;color:#1F3864;background:#e8eaf6;border-radius:4px;padding:1px 7px;white-space:nowrap}
+.cnt-badge{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap}
+.cnt-out{color:#185FA5;background:#e3f2fd}
+.cnt-in{color:#1565c0;background:#e8f4ff}
+.item-name{font-size:13px;color:#333;margin-top:3px;line-height:1.4}
+.chevron{color:#aaa;flex-shrink:0;font-size:12px;margin-top:2px;transition:transform .2s}
+.card.open .chevron{transform:rotate(180deg)}
+.card-body{display:none;padding:0 14px 12px;border-top:1px solid #f0f0f0}
+.card.open .card-body{display:block}
+.item-id{font-size:11px;color:#bbb;margin:8px 0 10px}
+
+/* 回遊元 */
+.inbound-box{margin-bottom:10px;padding:8px 10px;background:#f0f4ff;border-radius:8px;border-left:2px solid #90caf9}
+.inbound-title{font-size:11px;color:#1565c0;font-weight:700;margin-bottom:6px}
+.inbound-tags{display:flex;flex-wrap:wrap;gap:4px}
+.inbound-tag{font-size:12px;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;border-radius:5px;padding:2px 8px;font-weight:500}
+
+/* バナー行 */
+.banner-title{font-size:11px;color:#1F3864;font-weight:700;margin-bottom:6px}
+.banner-row{background:#f8f8f8;border-radius:8px;padding:9px 10px;margin-bottom:6px}
+.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;border-width:1px;border-style:solid}
+.badge-item{background:#e8f5e9;color:#2e7d32;border-color:#a5d6a7}
+.badge-rms{background:#fff8e1;color:#e65100;border-color:#ffe082}
+.badge-rak{background:#e3f2fd;color:#1565c0;border-color:#90caf9}
+.badge-ext{background:#fce4ec;color:#b71c1c;border-color:#f48fb1}
+.banner-field{font-size:11px;color:#888;margin-left:6px}
+.dst-label{font-size:13px;font-weight:700;color:#2e7d32;margin:4px 0 2px}
+.dst-name{font-weight:400;font-size:11px;color:#888;margin-left:6px}
+.dst-id{font-weight:400;font-size:10px;color:#bbb;margin-left:6px}
+.banner-url{font-size:11px;color:#555;word-break:break-all;margin-top:2px}
+.warn-box{font-size:11px;color:#e65100;background:#fff8e1;border-radius:4px;padding:5px 7px;margin-top:5px;line-height:1.5}
+.no-banner{font-size:12px;color:#bbb;font-style:italic;padding:4px 0}
+
+/* レスポンシブ */
+@media(max-width:480px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .stat-val{font-size:20px}
+  .btn-csv{margin-left:0;width:100%;text-align:center;margin-top:6px}
+}
+
+.pv-status{font-size:12px;color:#888}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ヘッダー -->
+  <div class="header">
+    <span style="font-size:28px">🔁</span>
+    <div>
+      <h1>回遊バナー解析ツール</h1>
+      <p>RMS商品CSV / xlsx をアップロードして双方向バナーマップを確認</p>
+    </div>
+  </div>
+
+  <!-- ドロップゾーン -->
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+    <div class="icon">📂</div>
+    <div class="title">ファイルをタップ / ドロップ</div>
+    <div class="sub">CSV（Shift-JIS）または xlsx に対応</div>
+    <button class="btn-upload" onclick="event.stopPropagation();document.getElementById('fileInput').click()">ファイルを選択</button>
+  </div>
+
+  <!-- ローディング -->
+  <div class="loading" id="loading">
+    <span class="spinner">⏳</span>
+    <div style="font-size:14px;color:#555">解析中... しばらくお待ちください</div>
+  </div>
+
+  <!-- エラー -->
+  <div class="error" id="error"></div>
+
+  <!-- 結果エリア -->
+  <div id="result" style="display:none">
+    <div class="stats" id="stats"></div>
+      <div class="toolbar">
+      <input type="text" id="searchBox" placeholder="🔍 商品名・商品番号・管理番号で検索">
+      <div class="filters">
+        <button class="active" onclick="setFilter('all',this)">全件</button>
+        <button onclick="setFilter('warn',this)">⚠ 要確認</button>
+        <button onclick="setFilter('none',this)">バナーなし</button>
+        <button onclick="setFilter('ok',this)">✓ 正常</button>
+        <button class="btn-csv" onclick="exportCSV()">⬇ CSV出力</button>
+        <button class="btn-reset" onclick="reset()">リセット</button>
+      </div>
+    </div>
+    <div id="count"></div>
+    <div id="list"></div>
+  </div>
+
+</div>
+
+<script>
+// ---- 状態 ----
+let allProducts = [];
+let currentFilter = 'all';
+
+// ---- ドロップ対応 ----
+const dz = document.getElementById('dropzone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+  e.target.value = '';
+});
+
+// ---- ファイル処理 ----
+function handleFile(file) {
+  const isXlsx = /\.(xlsx|xls)$/i.test(file.name);
+  const isCsv  = /\.csv$/i.test(file.name);
+  if (!isXlsx && !isCsv) { showError('CSV または xlsx ファイルを選択してください'); return; }
+  showLoading(true);
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const buf = e.target.result;
+      let rows;
+      if (isXlsx) {
+        const wb = XLSX.read(buf, {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      } else {
+        const bytes = new Uint8Array(buf);
+        let text;
+        if (bytes[0]===0xEF && bytes[1]===0xBB && bytes[2]===0xBF) {
+          text = new TextDecoder('utf-8').decode(buf.slice(3));
+        } else {
+          text = new TextDecoder('shift-jis',{fatal:false}).decode(buf);
+          if (!(text.split('\n')[0]||'').includes('商品管理番号')) {
+            const u = new TextDecoder('utf-8',{fatal:false}).decode(buf);
+            if ((u.split('\n')[0]||'').includes('商品管理番号')) text = u;
+          }
+        }
+        rows = parseCSV(text);
+      }
+      const result = processRows(rows);
+      if (!result.length) throw new Error('商品データが見つかりませんでした。説明文入りの全項目CSVを使用してください。');
+      allProducts = result;
+      render();
+    } catch(err) { showError(err.message); }
+    finally { showLoading(false); }
+  };
+  reader.onerror = () => { showError('ファイル読み込みエラー'); showLoading(false); };
+  reader.readAsArrayBuffer(file);
+}
+
+// ---- CSV パーサー ----
+function parseCSV(text) {
+  text = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  const rows=[], n=text.length; let i=0;
+  while(i<n){
+    const row=[]; let hasContent=false;
+    while(i<n && text[i]!=='\n'){
+      if(text[i]==='"'){
+        i++; let cell='';
+        while(i<n){ if(text[i]==='"'&&text[i+1]==='"'){cell+='"';i+=2;} else if(text[i]==='"'){i++;break;} else cell+=text[i++]; }
+        row.push(cell.trim()); if(cell.trim()) hasContent=true;
+        if(text[i]===',') i++;
+      } else {
+        let cell='';
+        while(i<n&&text[i]!==','&&text[i]!=='\n') cell+=text[i++];
+        row.push(cell.trim()); if(cell.trim()) hasContent=true;
+        if(text[i]===',') i++;
+      }
+    }
+    if(text[i]==='\n') i++;
+    if(hasContent) rows.push(row);
+  }
+  return rows;
+}
+
+// ---- バナー抽出 ----
+function extractBanners(html, field) {
+  if (!html) return [];
+  const pat = /<a\s+href=["']([^"']+)["'][^>]*>\s*<img\s[^>]*src=["']([^"']+)["'][^>]*>\s*<\/a>/gi;
+  const out=[]; let m;
+  while((m=pat.exec(html))!==null){
+    const link=m[1].trim(), img=m[2].trim();
+    let kind='外部リンク', warn=true;
+    if(link.includes('soko.rms.rakuten.co.jp')){kind='RMS管理画面リンク';warn=true;}
+    else if(link.includes('item.rakuten.co.jp')){kind='商品ページ';warn=false;}
+    else if(link.includes('rakuten.co.jp')){kind='楽天内';warn=false;}
+    out.push({link,img,kind,warn,field});
+  }
+  return out;
+}
+
+function getItemId(url){
+  const m=url.match(/(?:item\.rakuten\.co\.jp|soko\.rms\.rakuten\.co\.jp)\/[^\/]+\/([^\/\?#\s]+)/);
+  return m?m[1].replace(/\/$/,''):null;
+}
+
+// ---- データ処理 ----
+function processRows(rows){
+  if(rows.length<2) return [];
+  const h=rows[0];
+  const idx=name=>h.findIndex(c=>String(c).trim()===name);
+  const I_ID=idx('商品管理番号（商品URL）'),I_NO=idx('商品番号'),I_NAME=idx('商品名');
+  const I_PC=idx('PC用商品説明文'),I_SP=idx('スマートフォン用商品説明文'),I_SELL=idx('PC用販売説明文');
+  if(I_ID<0||I_NAME<0) return [];
+
+  const idToInfo={}, raw=[], seen=new Set();
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r];
+    const itemId=String(row[I_ID]||'').trim();
+    const name=String(row[I_NAME]||'').trim();
+    if(!name||seen.has(itemId)) continue;
+    seen.add(itemId);
+    const itemNo=String(row[I_NO]||'').trim();
+    idToInfo[itemId]={itemNo,name};
+    const allB=[
+      ...extractBanners(String(row[I_PC]||''),'PC説明文'),
+      ...extractBanners(String(row[I_SP]||''),'SP説明文'),
+      ...extractBanners(String(row[I_SELL]||''),'PC販売説明文'),
+    ];
+    const lm={};
+    for(const b of allB){
+      if(!lm[b.link]) lm[b.link]={...b,fields:[b.field]};
+      else if(!lm[b.link].fields.includes(b.field)) lm[b.link].fields.push(b.field);
+    }
+    raw.push({itemId,itemNo,name,banners:Object.values(lm)});
+  }
+
+  // 回遊元マップ
+  const inMap={};
+  for(const p of raw){
+    for(const b of p.banners){
+      const d=getItemId(b.link); if(!d) continue;
+      if(!inMap[d]) inMap[d]=[];
+      if(!inMap[d].find(x=>x.srcId===p.itemId)) inMap[d].push({srcId:p.itemId,srcNo:p.itemNo});
+    }
+  }
+
+  return raw.map(p=>({
+    ...p,
+    banners:p.banners.map(b=>{
+      const d=getItemId(b.link);
+      const info=d?idToInfo[d]:null;
+      return{...b,dstId:d||null,dstNo:info?.itemNo||null,dstName:info?.name||null};
+    }),
+    inbound:inMap[p.itemId]||[],
+  }));
+}
+
+// ---- 描画 ----
+function render(){
+  const total=allProducts.length;
+  const totalB=allProducts.reduce((s,p)=>s+p.banners.length,0);
+  const warn=allProducts.reduce((s,p)=>s+p.banners.filter(b=>b.warn).length,0);
+  const none=allProducts.filter(p=>!p.banners.length).length;
+
+  document.getElementById('stats').innerHTML=`
+    <div class="stat"><div class="stat-label">商品数</div><div class="stat-val" style="color:#1F3864">${total.toLocaleString()}</div></div>
+    <div class="stat"><div class="stat-label">バナー総数</div><div class="stat-val" style="color:#185FA5">${totalB.toLocaleString()}</div></div>
+    <div class="stat"><div class="stat-label">⚠ 要確認</div><div class="stat-val" style="color:#e65100">${warn.toLocaleString()}</div></div>
+    <div class="stat"><div class="stat-label">バナーなし</div><div class="stat-val" style="color:#9e9e9e">${none.toLocaleString()}</div></div>`;
+
+  document.getElementById('dropzone').style.display='none';
+  document.getElementById('result').style.display='block';
+  applyFilter();
+}
+
+function badgeClass(kind){
+  if(kind==='商品ページ') return 'badge-item';
+  if(kind==='RMS管理画面リンク') return 'badge-rms';
+  if(kind==='楽天内') return 'badge-rak';
+  return 'badge-ext';
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function buildCard(p){
+  const hasWarn=p.banners.some(b=>b.warn);
+  const left=hasWarn?'#f57f17':(!p.banners.length?'#bbb':'#4caf50');
+
+  const cntOut=p.banners.length?`<span class="cnt-badge cnt-out">→${p.banners.length}件</span>`:'';
+  const cntIn=p.inbound.length?`<span class="cnt-badge cnt-in">←${p.inbound.length}件</span>`:'';
+  const wIcon=hasWarn?'<span style="color:#e65100;font-size:13px">⚠</span>':'';
+
+  const inboundHtml=p.inbound.length?`
+    <div class="inbound-box">
+      <div class="inbound-title">← 回遊元（この商品にバナーを貼っている商品）</div>
+      <div class="inbound-tags">${p.inbound.map(x=>`<span class="inbound-tag">${esc(x.srcNo||x.srcId)}</span>`).join('')}</div>
+    </div>`:'';
+
+  const bannersHtml=!p.banners.length
+    ?'<div class="no-banner">バナー未設定</div>'
+    :`<div class="banner-title">→ 回遊先バナー（${p.banners.length}件）</div>`+
+     p.banners.map(b=>{
+       const dst=b.dstNo
+         ?`<div class="dst-label">先: ${esc(b.dstNo)}<span class="dst-name">${esc((b.dstName||'').slice(0,25))}${(b.dstName||'').length>25?'…':''}</span><span class="dst-id">(${esc(b.dstId)})</span></div>`
+         :b.dstId?`<div style="font-size:11px;color:#888;margin:4px 0">管理番号: ${esc(b.dstId)}（CSV内に対象商品なし）</div>`:'';
+       const wMsg=b.kind==='RMS管理画面リンク'
+         ?'<div class="warn-box">⚠ 購入者がクリックするとRMSログイン画面に飛びます。<br>item.rakuten.co.jp のURLに修正してください。</div>':'';
+       return `<div class="banner-row">
+         <span class="badge ${badgeClass(b.kind)}">${esc(b.kind)}</span><span class="banner-field">${esc(b.fields.join(' / '))}</span>
+         ${dst}<div class="banner-url">${esc(b.link)}</div>${wMsg}
+       </div>`;
+     }).join('');
+
+  return `<div class="card" style="border-left-color:${left}"
+    data-warn="${hasWarn?1:0}" data-none="${!p.banners.length?1:0}" data-ok="${(!hasWarn&&p.banners.length)?1:0}"
+    data-text="${esc((p.itemNo+' '+p.name+' '+p.itemId).toLowerCase())}" data-no="${esc(p.itemNo)}" data-id="${esc(p.itemId)}" data-pv="0">
+    <div class="card-header" onclick="toggle(this)">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:3px">
+          <span class="item-no">${esc(p.itemNo||p.itemId)}</span>${cntOut}${cntIn}${wIcon}
+        </div>
+        <div class="item-name">${esc(p.name.length>55?p.name.slice(0,55)+'…':p.name)}</div>
+      </div>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="card-body">
+      <div class="item-id">${esc(p.itemId)}</div>
+      ${inboundHtml}${bannersHtml}
+    </div>
+  </div>`;
+}
+
+function applyFilter(){
+  const q=document.getElementById('searchBox').value.toLowerCase().trim();
+  const list=document.getElementById('list');
+  const cards=list.querySelectorAll('.card');
+  let visible=0;
+  cards.forEach(el=>{
+    const matchQ=!q||el.dataset.text.includes(q);
+    let show=matchQ;
+    if(currentFilter==='warn') show=matchQ&&el.dataset.warn==='1';
+    if(currentFilter==='none') show=matchQ&&el.dataset.none==='1';
+    if(currentFilter==='ok')   show=matchQ&&el.dataset.ok==='1';
+    el.style.display=show?'':'none';
+    if(show) visible++;
+  });
+  document.getElementById('count').textContent=visible.toLocaleString()+'件表示';
+}
+
+// 初回描画はDOMに一括挿入（5000件でも高速）
+function buildList(){
+  document.getElementById('list').innerHTML=allProducts.map(buildCard).join('');
+}
+
+function toggle(header){
+  const card=header.parentElement;
+  card.classList.toggle('open');
+}
+
+function setFilter(f,btn){
+  currentFilter=f;
+  document.querySelectorAll('.filters button:not(.btn-csv):not(.btn-reset)').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilter();
+}
+
+function reset(){
+  allProducts=[];
+  document.getElementById('dropzone').style.display='';
+  document.getElementById('result').style.display='none';
+  document.getElementById('fileInput').value='';
+  document.getElementById('searchBox').value='';
+  currentFilter='all';
+}
+
+function showLoading(on){
+  document.getElementById('loading').style.display=on?'block':'none';
+  document.getElementById('dropzone').style.display=on?'none':'';
+  if(on){ document.getElementById('error').style.display='none'; }
+}
+
+function showError(msg){
+  const el=document.getElementById('error');
+  el.textContent='⚠ '+msg; el.style.display='block';
+  document.getElementById('loading').style.display='none';
+  document.getElementById('dropzone').style.display='';
+}
+
+// 描画タイミング：processRows後にsetTimeout0で非同期にDOM挿入
+const _render=render;
+render=function(){
+  const total=allProducts.length;
+  const totalB=allProducts.reduce((s,p)=>s+p.banners.length,0);
+  const warn=allProducts.reduce((s,p)=>s+p.banners.filter(b=>b.warn).length,0);
+  const none=allProducts.filter(p=>!p.banners.length).length;
+  document.getElementById('stats').innerHTML=`
+    <div class="stat"><div class="stat-label">商品数</div><div class="stat-val" style="color:#1F3864">${total.toLocaleString()}</div></div>
+    <div class="stat"><div class="stat-label">バナー総数</div><div class="stat-val" style="color:#185FA5">${totalB.toLocaleString()}</div></div>
+    <div class="stat"><div class="stat-label">⚠ 要確認</div><div class="stat-val" style="color:#e65100">${warn.toLocaleString()}</div></div>
+    <div class="stat"><div class="stat-label">バナーなし</div><div class="stat-val" style="color:#9e9e9e">${none.toLocaleString()}</div></div>`;
+  document.getElementById('dropzone').style.display='none';
+  document.getElementById('result').style.display='block';
+  document.getElementById('loading').style.display='block';
+  document.getElementById('loading').querySelector('div').textContent='カード描画中...';
+  setTimeout(()=>{
+    buildList();
+    markOrigIdx();
+    showLoading(false);
+    applyFilter();
+  },50);
+};
+
+// CSV出力
+function exportCSV(){
+  const rows=[['商品管理番号','商品番号','商品名','掲載フィールド','No','リンク種別','警告',
+    '回遊先_管理番号','回遊先_商品番号','回遊先_商品名','回遊元_商品番号一覧','リンク先URL','画像URL']];
+  for(const p of allProducts){
+    const inNos=(p.inbound||[]).map(x=>x.srcNo||x.srcId).join(' / ');
+    if(!p.banners.length){
+      rows.push([p.itemId,p.itemNo,p.name,'—',0,'なし','','','','',inNos,'（バナーなし）','']);
+    } else {
+      p.banners.forEach((b,i)=>rows.push([
+        p.itemId,p.itemNo,p.name,b.fields.join('/'),i+1,b.kind,b.warn?'要確認':'OK',
+        b.dstId||'',b.dstNo||'',b.dstName||'',inNos,b.link,b.img
+      ]));
+    }
+  }
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:'回遊バナー一覧.csv'});
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+
+document.getElementById('searchBox').addEventListener('input',applyFilter);
+</script>
+</body>
+</html>
