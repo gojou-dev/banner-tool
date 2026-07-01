@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>楽天 回遊バナー統合ツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/encoding-japanese/2.0.0/encoding.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,Arial,sans-serif;background:#f0f2f7;min-height:100vh}
+.wrap{max-width:920px;margin:0 auto;padding:14px}
+.header{background:#1F3864;color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+.header h1{font-size:16px;font-weight:700}
+.header p{font-size:11px;opacity:.7;margin-top:2px}
+
+/* データ読込バー */
+.databar{background:#fff;border-radius:12px;padding:12px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.databar-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.databar-row:last-child{margin-bottom:0}
+.db-label{font-size:12px;font-weight:700;min-width:120px}
+.db-btn{font-size:12px;font-weight:600;cursor:pointer;border-radius:6px;padding:7px 14px;border:none}
+.db-btn-main{background:#1F3864;color:#fff}
+.db-btn-sub{background:#fff8e1;color:#e65100;border:1px solid #ffcc80}
+.db-st{font-size:12px;color:#888}
+.db-st.ok{color:#2e7d32;font-weight:600}
+
+/* タブ */
+.tabs{display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap}
+.tab{flex:1;min-width:90px;font-size:12px;font-weight:600;text-align:center;padding:10px 6px;border-radius:10px 10px 0 0;background:#dfe4ee;color:#555;cursor:pointer;border:none}
+.tab.active{background:#fff;color:#1F3864;box-shadow:0 -2px 6px rgba(0,0,0,.05)}
+.panel{display:none}
+.panel.active{display:block}
+
+.empty{background:#fff;border-radius:12px;padding:40px 20px;text-align:center;color:#888;font-size:14px}
+
+/* 共通：統計・ツールバー・カード */
+.stats{display:grid;gap:8px;margin-bottom:12px}
+.stat{background:#fff;border-radius:10px;padding:11px 6px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.stat-label{font-size:10px;color:#888;margin-bottom:3px}
+.stat-val{font-size:20px;font-weight:700}
+.toolbar{background:#fff;border-radius:10px;padding:10px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.search{width:100%;font-size:14px;padding:9px 12px;border-radius:8px;border:1px solid #ddd;outline:none;margin-bottom:8px}
+.ctrl-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chip{font-size:12px;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:500;border:1px solid #ccc;background:#fff;color:#333}
+.chip.active{background:#1F3864;color:#fff;border-color:#1F3864}
+.sortsel{font-size:12px;padding:7px 10px;border-radius:6px;border:1px solid #ccc;background:#fff;color:#333}
+.count{font-size:12px;color:#888;margin-bottom:8px}
+
+.card{background:#fff;border-radius:10px;border:0.5px solid #e0e0e0;border-left-width:3px;margin-bottom:8px;overflow:hidden}
+.card-h{padding:10px 14px;cursor:pointer;display:flex;align-items:flex-start;gap:8px}
+.chk{width:18px;height:18px;cursor:pointer;accent-color:#c62828;flex-shrink:0;margin-top:2px}
+.ino{font-size:12px;font-weight:700;color:#1F3864;background:#e8eaf6;border-radius:4px;padding:1px 7px;white-space:nowrap}
+.badge-s{font-size:11px;border-radius:4px;padding:1px 6px;white-space:nowrap}
+.b-out{color:#185FA5;background:#e3f2fd}
+.b-in{color:#1565c0;background:#e8f4ff}
+.b-ac{color:#e65100;background:#fff3e0}
+.nm{font-size:13px;color:#333;margin-top:3px;line-height:1.4}
+.chev{color:#aaa;flex-shrink:0;font-size:12px;margin-top:2px}
+.card-b{display:none;padding:0 14px 12px;border-top:1px solid #f0f0f0}
+.card.open .card-b{display:block}
+.iid{font-size:11px;color:#bbb;margin:8px 0}
+
+.loading{display:none;text-align:center;padding:30px;color:#555;font-size:14px}
+.err{display:none;background:#FCEBEB;border:1px solid #F09595;border-radius:10px;padding:12px 14px;color:#A32D2D;font-size:13px;margin-bottom:12px}
+
+@media(max-width:480px){.tab{min-width:0;font-size:11px;padding:9px 3px}.db-label{min-width:0;width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <span style="font-size:24px">🔁</span>
+    <div><h1>楽天 回遊バナー統合ツール</h1><p>商品CSVとアクセス資料を1回読み込めば全機能で共有</p></div>
+  </div>
+
+  <!-- データ読込 -->
+  <div class="databar">
+    <div class="databar-row">
+      <span class="db-label">① 商品CSV / xlsx</span>
+      <button class="db-btn db-btn-main" onclick="document.getElementById('mainFile').click()">ファイルを選択</button>
+      <input type="file" id="mainFile" accept=".csv,.xlsx,.xls" style="display:none">
+      <span class="db-st" id="mainSt">未読み込み（必須）</span>
+    </div>
+    <div class="databar-row">
+      <span class="db-label">② アクセス資料CSV</span>
+      <button class="db-btn db-btn-sub" onclick="document.getElementById('acFile').click()">ファイルを選択</button>
+      <input type="file" id="acFile" accept=".csv" style="display:none">
+      <span class="db-st" id="acSt">未読み込み（任意）</span>
+    </div>
+  </div>
+
+  <div id="editbar" style="display:none;background:#1F3864;border-radius:12px;padding:12px 14px;margin-bottom:12px;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(31,56,100,.3)">
+    <span style="font-size:14px;font-weight:700;color:#fff">✏️ <span id="editbar-count">0商品 変更中</span></span>
+    <button onclick="clearAllEdits()" style="font-size:12px;padding:6px 12px;border-radius:6px;border:1px solid rgba(255,255,255,.5);background:transparent;color:#fff;cursor:pointer;font-weight:600">変更を取消</button>
+    <button onclick="downloadAllEdits()" style="font-size:13px;padding:8px 16px;border-radius:8px;background:#ffd54f;color:#1F3864;border:none;cursor:pointer;font-weight:700;margin-left:auto">⬇ 全変更を一括CSV出力</button>
+  </div>
+  <div class="err" id="err"></div>
+  <div class="loading" id="loading">⏳ 処理中...</div>
+
+  <!-- タブ -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('banner',this)">🔁 バナー解析</button>
+    <button class="tab" onclick="switchTab('inbound',this)">📊 回遊元</button>
+    <button class="tab" onclick="switchTab('list',this)">🖼 バナー一覧</button>
+  </div>
+
+  <div class="panel active" id="panel-banner"><div class="empty" id="empty-banner">商品CSVを読み込んでください</div><div id="body-banner"></div></div>
+  <div class="panel" id="panel-inbound"><div class="empty" id="empty-inbound">商品CSVを読み込んでください</div><div id="body-inbound"></div></div>
+  <div class="panel" id="panel-list"><div class="empty" id="empty-list">商品CSVを読み込んでください</div><div id="body-list"></div></div>
+</div>
+
+<!-- 画像URL変更モーダル -->
+<div id="imgEditModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:20px;max-width:480px;width:92%;max-height:88vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;color:#7b1fa2;margin-bottom:8px">🖼 画像URLを変更</div>
+    <div id="imgEditDesc" style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6"></div>
+    <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px">新しい画像URL</label>
+    <input type="text" id="imgEditNew" placeholder="新しい画像URL" style="width:100%;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box">
+    <div style="font-size:11px;color:#888;margin-top:6px">このバナーを使う全商品の画像が差し替わります。</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button onclick="document.getElementById('imgEditModal').style.display='none'" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#fff;border:1px solid #ccc;color:#555;cursor:pointer;font-weight:600">キャンセル</button>
+      <button onclick="dlImgEdit()" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#7b1fa2;color:#fff;border:none;cursor:pointer;font-weight:600">差し替えCSVをDL</button>
+    </div>
+  </div>
+</div>
+
+<!-- 別商品に追加モーダル -->
+<div id="addToModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:20px;max-width:540px;width:92%;max-height:88vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;color:#2e7d32;margin-bottom:8px">➕ このバナーを別商品に追加</div>
+    <div id="addToDesc" style="font-size:13px;color:#555;margin-bottom:10px;line-height:1.6"></div>
+    <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px">追加位置</label>
+    <label style="font-weight:400;font-size:13px;margin-right:16px"><input type="radio" name="addToPos" value="top" checked> 一番上</label>
+    <label style="font-weight:400;font-size:13px"><input type="radio" name="addToPos" value="bottom"> 一番下</label>
+    <label style="font-size:12px;font-weight:600;color:#555;display:block;margin:14px 0 4px">商品を検索して追加先を選ぶ</label>
+    <input type="text" id="addToSearch" placeholder="🔍 例: ジムニー" oninput="searchAddTo()" style="width:100%;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box">
+    <div id="addToResult" style="max-height:260px;overflow-y:auto;margin-top:6px"></div>
+    <label style="font-size:12px;font-weight:600;color:#555;display:block;margin:12px 0 4px">追加先の商品管理番号</label>
+    <textarea id="addToIds" placeholder="例: 10000056, 10000061" oninput="previewAddTo()" style="width:100%;min-height:56px;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box;resize:vertical"></textarea>
+    <div id="addToPreview" style="margin-top:8px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button onclick="document.getElementById('addToModal').style.display='none'" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#fff;border:1px solid #ccc;color:#555;cursor:pointer;font-weight:600">キャンセル</button>
+      <button onclick="dlAddTo()" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#2e7d32;color:#fff;border:none;cursor:pointer;font-weight:600">追加CSVをDL</button>
+    </div>
+  </div>
+</div>
+
+<!-- 既存商品から削除モーダル -->
+<div id="delFromModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:20px;max-width:540px;width:92%;max-height:88vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;color:#c62828;margin-bottom:8px">🗑 このバナーを商品から削除</div>
+    <div id="delFromDesc" style="font-size:13px;color:#555;margin-bottom:10px;line-height:1.6"></div>
+    <label style="font-size:12px;font-weight:600;color:#555;display:block;margin:8px 0 4px">削除対象の商品管理番号（空欄＝このバナーを使う全商品）</label>
+    <textarea id="delFromIds" placeholder="空欄=全商品 / 例: 10000056, 10000061" oninput="showIdsPV('delFromIds','delFromPV')" style="width:100%;min-height:56px;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box;resize:vertical"></textarea>
+    <div id="delFromPV" style="margin-top:6px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button onclick="document.getElementById('delFromModal').style.display='none'" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#fff;border:1px solid #ccc;color:#555;cursor:pointer;font-weight:600">キャンセル</button>
+      <button onclick="dlDelFrom()" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#c62828;color:#fff;border:none;cursor:pointer;font-weight:600">削除CSVをDL</button>
+    </div>
+  </div>
+</div>
+
+<!-- 一括追加モーダル -->
+<div id="bulkAddModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:20px;max-width:540px;width:92%;max-height:88vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;color:#2e7d32;margin-bottom:8px">➕ 選択バナーを一括追加</div>
+    <div id="bulkAddDesc" style="font-size:13px;color:#555;margin-bottom:10px"></div>
+    <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px">追加位置</label>
+    <label style="font-weight:400;font-size:13px;margin-right:16px"><input type="radio" name="bulkAddPos" value="top" checked> 一番上</label>
+    <label style="font-weight:400;font-size:13px"><input type="radio" name="bulkAddPos" value="bottom"> 一番下</label>
+    <label style="font-size:12px;font-weight:600;color:#555;display:block;margin:14px 0 4px">追加先の商品管理番号</label>
+    <textarea id="bulkAddIds" placeholder="例: 10000056, 10000061" oninput="showIdsPV('bulkAddIds','bulkAddPV')" style="width:100%;min-height:60px;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box;resize:vertical"></textarea>
+    <div id="bulkAddPV" style="margin-top:6px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button onclick="document.getElementById('bulkAddModal').style.display='none'" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#fff;border:1px solid #ccc;color:#555;cursor:pointer;font-weight:600">キャンセル</button>
+      <button onclick="dlBulkAdd()" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#2e7d32;color:#fff;border:none;cursor:pointer;font-weight:600">追加CSVをDL</button>
+    </div>
+  </div>
+</div>
+
+<!-- 一括削除モーダル -->
+<div id="bulkDelModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:20px;max-width:540px;width:92%;max-height:88vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;color:#c62828;margin-bottom:8px">🗑 選択バナーを一括削除</div>
+    <div id="bulkDelDesc" style="font-size:13px;color:#555;margin-bottom:10px"></div>
+    <label style="font-size:12px;font-weight:600;color:#555;display:block;margin:8px 0 4px">削除対象の商品管理番号（空欄＝選択バナーを使う全商品）</label>
+    <textarea id="bulkDelIds" placeholder="空欄=全商品 / 例: 10000056" oninput="showIdsPV('bulkDelIds','bulkDelPV')" style="width:100%;min-height:60px;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box;resize:vertical"></textarea>
+    <div id="bulkDelPV" style="margin-top:6px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button onclick="document.getElementById('bulkDelModal').style.display='none'" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#fff;border:1px solid #ccc;color:#555;cursor:pointer;font-weight:600">キャンセル</button>
+      <button onclick="dlBulkDel()" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#c62828;color:#fff;border:none;cursor:pointer;font-weight:600">削除CSVをDL</button>
+    </div>
+  </div>
+</div>
+
+<!-- バナー解析: バナー追加モーダル -->
+<div id="bnAddModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:20px;max-width:520px;width:92%;max-height:88vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;color:#2e7d32;margin-bottom:8px">➕ 商品にバナーを追加</div>
+    <div style="font-size:13px;color:#555;margin-bottom:10px">バナー一覧から選んでこの商品に追加します（説明文の一番上）。</div>
+    <input type="text" id="bnAddSearch" placeholder="🔍 リンク先・管理番号・商品名で検索" oninput="renderBnAddList(this.value)" style="width:100%;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box;margin-bottom:8px">
+    <div id="bnAddResult" style="max-height:340px;overflow-y:auto"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button onclick="document.getElementById('bnAddModal').style.display='none'" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#fff;border:1px solid #ccc;color:#555;cursor:pointer;font-weight:600">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 回遊元: 新規回遊元追加モーダル -->
+<div id="ibAddModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:20px;max-width:520px;width:92%;max-height:88vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;color:#2e7d32;margin-bottom:8px">➕ 新規回遊元を追加</div>
+    <div id="ibAddDesc" style="font-size:13px;color:#555;margin-bottom:10px;line-height:1.6"></div>
+    <label style="font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:4px">バナー画像URL</label>
+    <input type="text" id="ibAddImg" placeholder="https://image.rakuten.co.jp/.../xxx.jpg" style="width:100%;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box">
+    <label style="font-size:12px;font-weight:600;color:#555;display:block;margin:12px 0 4px">回遊元にする商品の管理番号（複数可）</label>
+    <textarea id="ibAddIds" placeholder="例: 10000056, 10000061" oninput="showIdsPV('ibAddIds','ibAddPV')" style="width:100%;min-height:56px;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box;resize:vertical"></textarea>
+    <div id="ibAddPV" style="margin-top:6px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button onclick="document.getElementById('ibAddModal').style.display='none'" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#fff;border:1px solid #ccc;color:#555;cursor:pointer;font-weight:600">キャンセル</button>
+      <button onclick="ibDoAdd()" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#2e7d32;color:#fff;border:none;cursor:pointer;font-weight:600">追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新規バナー作成モーダル -->
+<div id="newModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:20px;max-width:520px;width:92%;max-height:88vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;color:#1F3864;margin-bottom:8px">➕ 新規バナーを作成（先頭3・末尾3まで）</div>
+    <div style="font-size:13px;color:#555;margin-bottom:12px;line-height:1.6">各枠にバナーを設定。入力した枠だけ追加されます。</div>
+    <div id="slots"></div>
+    <label style="font-size:12px;font-weight:600;color:#555;display:block;margin:14px 0 4px">商品を検索して追加先を選ぶ</label>
+    <input type="text" id="prodSearch" placeholder="🔍 例: ジムニー" oninput="searchProd()" style="width:100%;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box">
+    <div id="prodResult" style="max-height:240px;overflow-y:auto;margin-top:6px"></div>
+    <label style="font-size:12px;font-weight:600;color:#555;display:block;margin:12px 0 4px">追加先の商品管理番号（カンマ・改行区切り／上で選ぶと自動追加）</label>
+    <textarea id="targetIds" placeholder="例: 10000056, 10000061" style="width:100%;min-height:60px;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box;resize:vertical"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button onclick="closeNew()" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#fff;border:1px solid #ccc;color:#555;cursor:pointer;font-weight:600">キャンセル</button>
+      <button onclick="dlNew()" style="font-size:13px;padding:8px 18px;border-radius:8px;background:#1F3864;color:#fff;border:none;cursor:pointer;font-weight:600">追加CSVをDL</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== グローバル共有データ =====
+var DATA={
+  products:[],   // {id,no,name,banners:[],inbound:[],outboundCount,inboundCount,access}
+  idInfo:{},     // id→{no,name}
+  accessMap:{},  // id→アクセス人数
+  allBanners:[], // {link,img,dstId,dstNo,dstName,kind,count,items,itemList}
+  rawHeaders:[], rawRows:[], colIdx:{}, shopName:'',
+  loaded:false,
+  edits:{}  // 管理番号→{pc,sp,sv} 編集後HTML（全シート共通）
+};
+
+// ===== ファイル読込 =====
+document.getElementById('mainFile').addEventListener('change',function(e){if(e.target.files[0])loadMain(e.target.files[0]);e.target.value='';});
+document.getElementById('acFile').addEventListener('change',function(e){if(e.target.files[0])loadAccess(e.target.files[0]);e.target.value='';});
+
+function loadMain(file){
+  var isX=/\.(xlsx|xls)$/i.test(file.name),isC=/\.csv$/i.test(file.name);
+  if(!isX&&!isC){showErr('CSV または xlsx を選択してください');return;}
+  showLoading(true);
+  var r=new FileReader();
+  r.onload=function(e){
+    try{
+      var rows;
+      if(isX){var wb=XLSX.read(e.target.result,{type:'array'});rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});}
+      else{var buf=e.target.result,b=new Uint8Array(buf),txt;if(b[0]===0xEF&&b[1]===0xBB&&b[2]===0xBF){txt=new TextDecoder('utf-8').decode(buf.slice(3));}else{txt=new TextDecoder('shift-jis',{fatal:false}).decode(buf);if(!(txt.split('\n')[0]||'').includes('商品管理番号')){var u=new TextDecoder('utf-8',{fatal:false}).decode(buf);if((u.split('\n')[0]||'').includes('商品管理番号'))txt=u;}}rows=parseCSV(txt);}
+      processMain(rows);
+      if(!DATA.products.length)throw new Error('商品データが見つかりませんでした。説明文入りの全項目CSVを使用してください。');
+      DATA.loaded=true;
+      document.getElementById('mainSt').textContent=DATA.products.length.toLocaleString()+'商品 読込完了（店舗: '+DATA.shopName+'）';
+      document.getElementById('mainSt').className='db-st ok';
+      renderAll();
+    }catch(ex){showErr(ex.message);}
+    finally{showLoading(false);}
+  };
+  r.onerror=function(){showErr('読み込みエラー');showLoading(false);};
+  r.readAsArrayBuffer(file);
+}
+
+function loadAccess(file){
+  var r=new FileReader();
+  r.onload=function(e){
+    try{
+      var txt=new TextDecoder('utf-8',{fatal:false}).decode(e.target.result);
+      if(txt.indexOf('商品管理番号')<0){var s=new TextDecoder('shift-jis',{fatal:false}).decode(e.target.result);if(s.indexOf('商品管理番号')>=0)txt=s;}
+      var lines=txt.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+      var hi=-1,ci_id=-1,ci_ac=-1,ci_nm=-1,ci_no=-1;
+      for(var i=0;i<lines.length;i++){
+        var cols=parseCSVLine(lines[i]);
+        var a=cols.findIndex(function(c){return c.trim()==='商品管理番号';});
+        var b=cols.findIndex(function(c){return c.trim()==='アクセス人数';});
+        if(a>=0&&b>=0){hi=i;ci_id=a;ci_ac=b;ci_nm=cols.findIndex(function(c){return c.trim()==='商品名';});ci_no=cols.findIndex(function(c){return c.trim()==='商品番号';});break;}
+      }
+      if(hi<0)throw new Error('「商品管理番号」「アクセス人数」列が見つかりません');
+      DATA.accessMap={};var cnt=0;
+      for(var j=hi+1;j<lines.length;j++){
+        var cols=parseCSVLine(lines[j]);
+        if(cols.length<=Math.max(ci_id,ci_ac))continue;
+        var id=cols[ci_id].trim(),ac=parseInt(cols[ci_ac].trim().replace(/,/g,''));
+        if(id&&!isNaN(ac)){
+          DATA.accessMap[id]=ac;cnt++;
+          if(!DATA.idInfo[id])DATA.idInfo[id]={no:ci_no>=0?(cols[ci_no]||'').trim():'',name:ci_nm>=0?(cols[ci_nm]||'').trim():''};
+        }
+      }
+      // 商品にaccessを反映
+      DATA.products.forEach(function(p){p.access=DATA.accessMap[p.id]!=null?DATA.accessMap[p.id]:null;});
+      document.getElementById('acSt').textContent=cnt.toLocaleString()+'件 アクセス読み込み完了';
+      document.getElementById('acSt').className='db-st ok';
+      if(DATA.loaded)renderAll();
+    }catch(ex){document.getElementById('acSt').textContent='エラー: '+ex.message;}
+  };
+  r.readAsArrayBuffer(file);
+}
+
+// ===== CSVパーサー =====
+function parseCSV(t){t=t.replace(/\r\n/g,'\n').replace(/\r/g,'\n');var rows=[],i=0,n=t.length;while(i<n){var row=[],ok=false;while(i<n&&t[i]!=='\n'){if(t[i]==='"'){i++;var c='';while(i<n){if(t[i]==='"'&&t[i+1]==='"'){c+='"';i+=2;}else if(t[i]==='"'){i++;break;}else c+=t[i++];}row.push(c.trim());if(c.trim())ok=true;if(t[i]===',')i++;}else{var c='';while(i<n&&t[i]!==','&&t[i]!=='\n')c+=t[i++];row.push(c.trim());if(c.trim())ok=true;if(t[i]===',')i++;}}if(t[i]==='\n')i++;if(ok)rows.push(row);}return rows;}
+function parseCSVLine(line){var out=[],i=0,n=line.length;while(i<n){if(line[i]==='"'){i++;var c='';while(i<n){if(line[i]==='"'&&line[i+1]==='"'){c+='"';i+=2;}else if(line[i]==='"'){i++;break;}else c+=line[i++];}out.push(c);if(line[i]===',')i++;}else{var c='';while(i<n&&line[i]!==',')c+=line[i++];out.push(c);if(line[i]===',')i++;}}return out;}
+
+// ===== バナー抽出・分類 =====
+var SHOPS=['beltaworks','gojou95'];
+function classify(url,allIds){
+  if(!url.startsWith('http'))return{kind:'不正URL',warn:true,cls:'b-del'};
+  if(url.includes('soko.rms.rakuten.co.jp'))return{kind:'RMS管理画面リンク',warn:true,cls:'b-rms',msg:'購入者がRMSログイン画面に飛びます。item.rakuten.co.jp に修正を。'};
+  var cm=/\/c\/(\d+)/.exec(url);
+  if(cm)return{kind:'カテゴリページ',warn:false,cls:'b-cat',catId:cm[1],note:'カテゴリ一覧ページへのリンクです。'};
+  if(url.includes('item.rakuten.co.jp')){var m=url.match(/item\.rakuten\.co\.jp\/([^\/]+)\/([^\/\?#\s]+)/);if(m){var shop=m[1],pid=m[2].replace(/\/$/,'');if(SHOPS.indexOf(shop)<0)return{kind:'他店舗（'+shop+'）',warn:true,cls:'b-shop',msg:'自社以外のショップへのリンクです。'};if(pid&&allIds.indexOf(pid)<0)return{kind:'削除済み・リンク切れ',warn:true,cls:'b-del',msg:'リンク先商品（'+pid+'）がCSV内にありません。'};return{kind:'商品ページ',warn:false,cls:'b-item'};}}
+  if(url.includes('rakuten.co.jp'))return{kind:'楽天内（商品以外）',warn:false,cls:'b-rak'};
+  return{kind:'外部サイト',warn:true,cls:'b-ext',msg:'楽天外のリンクです。'};
+}
+function getBanners(html,field,allIds){if(!html)return[];var p=/<a\s+href=["']([^"']+)["'][^>]*>\s*<img\s[^>]*src=["']([^"']+)["'][^>]*>\s*<\/a>/gi,m,out=[];while((m=p.exec(html))!==null){var lk=m[1].trim(),im=m[2].trim();out.push(Object.assign({link:lk,img:im,field:field},classify(lk,allIds)));}return out;}
+function getDstId(url){if(/\/c\/\d+/.test(url))return null;var m=url.match(/(?:item\.rakuten\.co\.jp|soko\.rms\.rakuten\.co\.jp)\/[^\/]+\/([^\/\?#\s]+)/);return m?m[1].replace(/\/$/,''):null;}
+
+// ===== メイン処理 =====
+function processMain(rows){
+  if(rows.length<2){DATA.products=[];return;}
+  DATA.rawHeaders=rows[0];DATA.rawRows=rows.slice(1);
+  var h=rows[0],idx=function(n){return h.findIndex(function(c){return String(c).trim()===n;});};
+  DATA.colIdx={id:idx('商品管理番号（商品URL）'),no:idx('商品番号'),name:idx('商品名'),pc:idx('PC用商品説明文'),sp:idx('スマートフォン用商品説明文'),sv:idx('PC用販売説明文')};
+  var C=DATA.colIdx;
+  if(C.id<0||C.name<0){DATA.products=[];return;}
+  // ショップ名推定
+  // 説明文中の店舗名を数え、最多の店舗名をこのCSVの店舗とする（2店舗対応：CSVごとに自動判定）
+  var shopCount={};
+  DATA.rawRows.forEach(function(row){[C.pc,C.sp,C.sv].forEach(function(ci){if(ci<0)return;var s=String(row[ci]||''),mm;var re=/item\.rakuten\.co\.jp\/([^\/]+)\//g;while((mm=re.exec(s))!==null){shopCount[mm[1]]=(shopCount[mm[1]]||0)+1;}});});
+  DATA.shopName='';var best=0;Object.keys(shopCount).forEach(function(s){if(shopCount[s]>best){best=shopCount[s];DATA.shopName=s;}});
+  if(!DATA.shopName)DATA.shopName='beltaworks';
+
+  DATA.idInfo={};var raw=[],seen={};
+  DATA.rawRows.forEach(function(row){
+    var iid=String(row[C.id]||'').trim(),nm=String(row[C.name]||'').trim();
+    if(!nm||seen[iid])return;seen[iid]=true;
+    var ino=String(row[C.no]||'').trim();
+    DATA.idInfo[iid]={no:ino,name:nm};
+    raw.push({id:iid,no:ino,name:nm,_pc:String(row[C.pc]||''),_sp:String(row[C.sp]||''),_sv:String(row[C.sv]||'')});
+  });
+  var allIds=Object.keys(DATA.idInfo);
+
+  // バナー付与
+  raw.forEach(function(p){
+    var ab=getBanners(p._pc,'PC説明文',allIds).concat(getBanners(p._sp,'SP説明文',allIds),getBanners(p._sv,'PC販売説明文',allIds));
+    var lm={};ab.forEach(function(b){if(!lm[b.link])lm[b.link]=Object.assign({},b,{fields:[b.field]});else if(lm[b.link].fields.indexOf(b.field)<0)lm[b.link].fields.push(b.field);});
+    p.banners=Object.values(lm);
+  });
+
+  // 回遊元マップ
+  var inMap={};
+  raw.forEach(function(p){p.banners.forEach(function(b){var d=getDstId(b.link);if(!d)return;if(!inMap[d])inMap[d]=[];if(!inMap[d].find(function(x){return x.srcId===p.id;}))inMap[d].push({srcId:p.id,srcNo:p.no});});});
+
+  // 商品に集計値を付与
+  DATA.products=raw.map(function(p){
+    var banners=p.banners.map(function(b){var d=getDstId(b.link),info=d?DATA.idInfo[d]:null;return Object.assign({},b,{dstId:d||null,dstNo:info?info.no:null,dstName:info?info.name:null});});
+    var inbound=inMap[p.id]||[];
+    return Object.assign({},p,{banners:banners,inbound:inbound,outboundCount:banners.length,inboundCount:inbound.length,access:DATA.accessMap[p.id]!=null?DATA.accessMap[p.id]:null});
+  });
+
+  // 全バナー収集
+  collectBanners(inMap);
+}
+
+function collectBanners(){
+  var bmap={};
+  DATA.products.forEach(function(p){
+    p.banners.forEach(function(b){
+      var key=b.link+'|'+b.img;
+      if(!bmap[key]){bmap[key]={link:b.link,img:b.img,dstId:b.dstId,dstNo:b.dstNo,dstName:b.dstName,kind:b.kind,cls:b.cls,count:0,items:{},itemList:[]};}
+      if(!bmap[key].items[p.id]){bmap[key].items[p.id]=true;bmap[key].count++;bmap[key].itemList.push(p.id);}
+    });
+  });
+  DATA.allBanners=Object.keys(bmap).map(function(k){return bmap[k];}).sort(function(a,b){return b.count-a.count;});
+}
+
+// ===== タブ切替 =====
+function switchTab(name,btn){
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
+  btn.classList.add('active');
+  document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active');});
+  document.getElementById('panel-'+name).classList.add('active');
+}
+
+// ===== 全タブ描画 =====
+function renderAll(){
+  renderBanner();
+  renderInbound();
+  renderList();
+}
+
+// ===== 編集管理（全シート共通）=====
+function getEditBase(id){
+  // 現在の編集後HTML（なければ元のHTML）を返す
+  if(DATA.edits[id])return DATA.edits[id];
+  var C=DATA.colIdx,row=null;
+  for(var i=0;i<DATA.rawRows.length;i++){if(String(DATA.rawRows[i][C.id]||'').trim()===id){row=DATA.rawRows[i];break;}}
+  if(!row)return null;
+  return {pc:String(row[C.pc]||''),sp:String(row[C.sp]||''),sv:String(row[C.sv]||'')};
+}
+function setEdit(id,html3){DATA.edits[id]=html3;updateEditBar();}
+function editCount(){return Object.keys(DATA.edits).length;}
+function updateEditBar(){
+  var n=editCount();
+  var bar=document.getElementById('editbar');
+  if(!bar)return;
+  bar.style.display=n>0?'flex':'none';
+  var c=document.getElementById('editbar-count');if(c)c.textContent=n+'商品 変更中';
+}
+function bannerHtmlOf(link,img){return '<a href="'+link+'"><img src="'+img+'" width="100%" border="0"></a>';}
+// 列別のバナー書式（入力CSVに合わせる）
+function bannerForCol(colKey,link,img){
+  if(colKey==='sp'){
+    // スマホ用: table width=100%
+    return '<table cellpadding="0" cellspacing="0" width="100%"><tr><td><a href="'+link+'">\n<IMG src="'+img+'" width="100%" border="0"></a></td></tr></table>';
+  }else if(colKey==='sv'){
+    // PC販売用: <CENTER>+table width=750
+    return '<CENTER>\n<table cellpadding="0" cellspacing="0" width="750"><tr><td><a href="'+link+'">\n<IMG src="'+img+'" width="750" border="0"></a></td></tr></table>';
+  }
+  // PC商品用（通常使わないがフォールバック）
+  return '<a href="'+link+'"><img src="'+img+'" width="100%" border="0"></a>';
+}
+function escReg(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+function delBannerHtml(html,link,img){if(!html)return '';var re=new RegExp('<a\\s+href=["\']'+escReg(link)+'["\'][^>]*>\\s*<img\\s[^>]*src=["\']'+escReg(img)+'["\'][^>]*>\\s*<\\/a>','gi');return html.replace(re,'').replace(/^\s*(<br\s*\/?>\s*)+/i,'').trim();}
+function downloadAllEdits(){
+  var n=editCount();if(!n){alert('変更がありません');return;}
+  var C=DATA.colIdx;
+  // 変更した商品の全行（メイン行＋SKU行）だけを、全列保持で出力
+  var out=[DATA.rawHeaders.slice()];
+  DATA.rawRows.forEach(function(row){
+    var id=String(row[C.id]||'').trim();
+    if(!id||!DATA.edits[id])return;  // 変更商品以外はスキップ
+    var nr=row.slice();
+    var hasName=String(row[C.name]||'').trim()!=='';
+    // メイン行（商品名あり）だけ説明文を差し替え、SKU行はそのまま含める
+    if(hasName){
+      var e=DATA.edits[id];
+      if(C.pc>=0)nr[C.pc]=e.pc;
+      if(C.sp>=0)nr[C.sp]=e.sp;
+      if(C.sv>=0)nr[C.sv]=e.sv;
+    }
+    out.push(nr);
+  });
+  if(out.length<2){alert('出力対象がありません');return;}
+  dlCSV(out,'バナー変更_変更商品CSV.csv');
+}
+function clearAllEdits(){if(!editCount())return;if(!confirm('すべての変更を取り消しますか？'))return;DATA.edits={};updateEditBar();renderAll();}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function showLoading(on){document.getElementById('loading').style.display=on?'block':'none';}
+function showErr(msg){document.getElementById('err').textContent='⚠ '+msg;document.getElementById('err').style.display='block';setTimeout(function(){document.getElementById('err').style.display='none';},6000);}
+
+// ===== 共通：並び替え =====
+function sortProducts(arr,key){
+  var a=arr.slice();
+  if(key==='access_desc')a.sort(function(x,y){return (y.access||0)-(x.access||0);});
+  else if(key==='access_asc')a.sort(function(x,y){return (x.access||0)-(y.access||0);});
+  else if(key==='out_desc')a.sort(function(x,y){return y.outboundCount-x.outboundCount;});
+  else if(key==='out_asc')a.sort(function(x,y){return x.outboundCount-y.outboundCount;});
+  else if(key==='in_desc')a.sort(function(x,y){return y.inboundCount-x.inboundCount;});
+  else if(key==='in_asc')a.sort(function(x,y){return x.inboundCount-y.inboundCount;});
+  return a;
+}
+var SORT_OPTS='<option value="default">並び順: 標準</option><option value="access_desc">アクセス多い順</option><option value="access_asc">アクセス少ない順</option><option value="out_desc">回遊先多い順</option><option value="out_asc">回遊先少ない順</option><option value="in_desc">回遊元多い順</option><option value="in_asc">回遊元少ない順</option>';
+
+// 商品の要確認サマリ（簡略）
+function warnSummary(p){
+  var kinds={};
+  p.banners.forEach(function(b){if(b.warn)kinds[b.kind]=(kinds[b.kind]||0)+1;});
+  var keys=Object.keys(kinds);
+  if(!keys.length)return '';
+  var short={'RMS管理画面リンク':'RMSリンク','削除済み・リンク切れ':'リンク切れ','外部サイト':'外部','不正URL':'不正URL'};
+  return keys.map(function(k){var nm=short[k]||k.replace(/（.*$/,'');return '⚠'+nm+(kinds[k]>1?'×'+kinds[k]:'');}).join(' ');
+}
+// 商品カードの統計バッジ
+function statBadges(p){
+  var s='';
+  if(p.outboundCount)s+='<span class="badge-s b-out">回遊先'+p.outboundCount+'</span>';
+  if(p.inboundCount)s+='<span class="badge-s b-in">回遊元'+p.inboundCount+'</span>';
+  if(p.access!=null)s+='<span class="badge-s b-ac">PV'+p.access.toLocaleString()+'</span>';
+  var ws=warnSummary(p);
+  if(ws)s+='<span class="badge-s" style="color:#c62828;background:#fdecea">'+esc(ws)+'</span>';
+  return s;
+}
+
+// ===== タブ1: バナー解析 =====
+var bnState={filter:'all',sort:'default',q:''};
+function renderBanner(){
+  document.getElementById('empty-banner').style.display='none';
+  var tb=DATA.products.reduce(function(s,p){return s+p.outboundCount;},0);
+  var wn=DATA.products.reduce(function(s,p){return s+p.banners.filter(function(b){return b.warn;}).length;},0);
+  var nb=DATA.products.filter(function(p){return!p.outboundCount;}).length;
+  document.getElementById('body-banner').innerHTML=
+    '<div class="stats" style="grid-template-columns:repeat(4,1fr)">'
+    +'<div class="stat"><div class="stat-label">商品数</div><div class="stat-val" style="color:#1F3864">'+DATA.products.length.toLocaleString()+'</div></div>'
+    +'<div class="stat"><div class="stat-label">バナー総数</div><div class="stat-val" style="color:#185FA5">'+tb.toLocaleString()+'</div></div>'
+    +'<div class="stat"><div class="stat-label">⚠要確認</div><div class="stat-val" style="color:#e65100">'+wn.toLocaleString()+'</div></div>'
+    +'<div class="stat"><div class="stat-label">バナーなし</div><div class="stat-val" style="color:#9e9e9e">'+nb.toLocaleString()+'</div></div></div>'
+    +'<div class="toolbar"><input class="search" id="bn-q" placeholder="🔍 商品名・番号・管理番号・回遊先で検索" oninput="bnState.q=this.value;drawBanner()">'
+    +'<div class="ctrl-row">'
+    +'<button class="chip active" data-f="all" onclick="bnSetF(\'all\',this)">全件</button>'
+    +'<button class="chip" data-f="warn" onclick="bnSetF(\'warn\',this)">⚠要確認</button>'
+    +'<button class="chip" data-f="none" onclick="bnSetF(\'none\',this)">バナーなし</button>'
+    +'<select class="sortsel" id="bn-sort" onchange="bnState.sort=this.value;drawBanner()">'+SORT_OPTS+'</select>'
+    +'</div><div style="margin-top:8px"><button onclick="delAllBroken()" style="width:100%;font-size:12px;padding:9px;border-radius:7px;background:#c62828;color:#fff;border:none;cursor:pointer;font-weight:600">⚠ リンク切れバナーを全商品から一括削除</button></div></div><div class="count" id="bn-count"></div><div id="bn-list"></div>';
+  drawBanner();
+}
+function bnSetF(f,btn){bnState.filter=f;document.querySelectorAll('#body-banner .chip').forEach(function(c){c.classList.remove('active');});btn.classList.add('active');drawBanner();}
+function drawBanner(){
+  var q=bnState.q.toLowerCase().trim();
+  var arr=DATA.products.filter(function(p){
+    if(bnState.filter==='warn'&&!p.banners.some(function(b){return b.warn;}))return false;
+    if(bnState.filter==='none'&&p.outboundCount)return false;
+    if(q){var t=(p.no+' '+p.name+' '+p.id+' '+p.banners.map(function(b){return (b.dstNo||'')+(b.dstName||'')+(b.dstId||'')+b.link;}).join(' ')).toLowerCase();if(t.indexOf(q)<0)return false;}
+    return true;
+  });
+  if(bnState.sort!=='default')arr=sortProducts(arr,bnState.sort);
+  document.getElementById('bn-count').textContent=arr.length.toLocaleString()+'件表示';
+  document.getElementById('bn-list').innerHTML=arr.map(function(p){
+    var hw=p.banners.some(function(b){return b.warn;}),left=hw?'#f57f17':(!p.outboundCount?'#bbb':'#4caf50');
+    var bans=!p.outboundCount?'<div style="font-size:12px;color:#bbb;font-style:italic;padding:4px 0">バナー未設定</div>':p.banners.map(function(b,bi){
+      var dst=b.dstNo?'<div style="font-size:13px;font-weight:700;color:#2e7d32;margin:4px 0 2px">先: '+esc(b.dstNo)+' <span style="font-weight:400;font-size:11px;color:#888">'+esc((b.dstName||'').slice(0,22))+'</span></div>':(b.dstId?'<div style="font-size:11px;color:#888;margin:4px 0">管理番号: '+esc(b.dstId)+'</div>':'');
+      var wm=b.msg?'<div style="font-size:11px;color:#e65100;background:#fff8e1;border-radius:4px;padding:5px 7px;margin-top:4px">⚠ '+esc(b.msg)+'</div>':(b.note?'<div style="font-size:11px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:5px 7px;margin-top:4px">'+esc(b.note)+'</div>':'');
+      return '<div style="background:#f8f8f8;border-radius:8px;padding:8px 10px;margin-bottom:6px;display:flex;gap:8px;align-items:flex-start"><input type="checkbox" class="bn-bchk" data-pid="'+esc(p.id)+'" data-link="'+esc(b.link)+'" data-img="'+esc(b.img)+'" style="margin-top:2px;width:16px;height:16px;flex-shrink:0"><div style="flex:1;min-width:0"><span style="font-size:11px;font-weight:600;color:#555">['+esc(b.kind)+']</span> <span style="font-size:11px;color:#888">'+esc(b.fields.join('/'))+'</span>'+dst+'<div style="font-size:11px;color:#555;word-break:break-all;margin-top:2px">'+esc(b.link)+'</div>'+wm+'</div></div>';
+    }).join('');
+    return '<div class="card" style="border-left-color:'+left+'"><div class="card-h" onclick="this.parentElement.classList.toggle(\'open\')"><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:3px"><span class="ino">'+esc(p.no||p.id)+'</span>'+statBadges(p)+(hw?'<span style="color:#e65100">⚠</span>':'')+'</div><div class="nm">'+esc(p.name.length>52?p.name.slice(0,52)+'…':p.name)+'</div></div><span class="chev">▼</span></div><div class="card-b"><div class="iid">管理番号: '+esc(p.id)+'</div>'+bans+(p.outboundCount?'<button onclick="bnDelChecked(\''+esc(p.id)+'\')" style="font-size:11px;padding:7px 13px;border-radius:6px;background:#c62828;color:#fff;border:none;cursor:pointer;font-weight:600;margin-right:6px;margin-top:4px">🗑 選択バナーを削除</button>':'')+'<button onclick="bnOpenAdd(\''+esc(p.id)+'\')" style="font-size:11px;padding:7px 13px;border-radius:6px;background:#2e7d32;color:#fff;border:none;cursor:pointer;font-weight:600;margin-top:4px">➕ バナーを追加</button></div></div>';
+  }).join('');
+}
+
+// リンク切れバナーを全商品から一括削除
+function delAllBroken(){
+  // kind が「削除済み・リンク切れ」のバナーを集める
+  var brokenSet={};var count=0;
+  DATA.products.forEach(function(p){p.banners.forEach(function(b){if(b.kind&&b.kind.indexOf('リンク切れ')>=0){brokenSet[b.link+'|'+b.img]=true;}});});
+  var keys=Object.keys(brokenSet);
+  if(!keys.length){alert('リンク切れバナーは見つかりませんでした');return;}
+  if(!confirm('リンク切れバナー'+keys.length+'種類を、使用している全商品から削除します。よろしいですか？'))return;
+  // 各商品で該当バナーを削除
+  DATA.products.forEach(function(p){
+    var hit=p.banners.some(function(b){return brokenSet[b.link+'|'+b.img];});
+    if(!hit)return;
+    var base=getEditBase(p.id);if(!base)return;
+    var pc=base.pc,sp=base.sp,sv=base.sv;
+    p.banners.forEach(function(b){if(brokenSet[b.link+'|'+b.img]){pc=delBannerHtml(pc,b.link,b.img);sp=delBannerHtml(sp,b.link,b.img);sv=delBannerHtml(sv,b.link,b.img);}});
+    setEdit(p.id,{pc:pc,sp:sp,sv:sv});applyEditToProduct(p.id);count++;
+  });
+  recomputeInbound();collectBanners();drawBanner();
+  alert(count+'商品からリンク切れバナーを削除リストに追加しました（上部から一括CSV出力できます）');
+}
+// バナー解析: 選択バナー削除
+function bnDelChecked(pid){
+  var chks=document.querySelectorAll('.bn-bchk[data-pid="'+CSS.escape(pid)+'"]:checked');
+  if(!chks.length){alert('削除するバナーを選択してください');return;}
+  var base=getEditBase(pid);if(!base)return;
+  var pc=base.pc,sp=base.sp,sv=base.sv;
+  chks.forEach(function(c){var link=c.getAttribute('data-link'),img=c.getAttribute('data-img');pc=delBannerHtml(pc,link,img);sp=delBannerHtml(sp,link,img);sv=delBannerHtml(sv,link,img);});
+  setEdit(pid,{pc:pc,sp:sp,sv:sv});
+  alert(chks.length+'件のバナーを削除リストに追加しました（上部から一括CSV出力できます）');
+  // 該当商品のデータも更新して再描画
+  applyEditToProduct(pid);
+  drawBanner();
+}
+// バナー解析: バナー追加（バナー一覧から選択）
+var bnAddTargetPid=null;
+function bnOpenAdd(pid){
+  bnAddTargetPid=pid;
+  document.getElementById('bnAddSearch').value='';
+  document.getElementById('bnAddResult').innerHTML='';
+  renderBnAddList('');
+  document.getElementById('bnAddModal').style.display='flex';
+}
+function renderBnAddList(q){
+  q=(q||'').toLowerCase().trim();
+  var arr=DATA.allBanners.filter(function(b){if(!q)return true;return ((b.dstNo||'')+' '+(b.dstName||'')+' '+(b.dstId||'')+' '+b.link).toLowerCase().indexOf(q)>=0;}).slice(0,100);
+  document.getElementById('bnAddResult').innerHTML=arr.map(function(b){
+    var lbl=b.dstNo?esc(b.dstNo)+' '+esc((b.dstName||'').slice(0,18)):esc(b.kind);
+    return '<div onclick="bnDoAdd(\''+encodeURIComponent(b.link+'|'+b.img)+'\')" style="display:flex;gap:8px;align-items:center;padding:6px;border-bottom:1px solid #f0f0f0;cursor:pointer"><img src="'+esc(b.img)+'" referrerpolicy="no-referrer" style="width:42px;height:42px;object-fit:cover;border-radius:4px;background:#eee" onerror="this.style.visibility=\'hidden\'"><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:#1F3864">'+lbl+'</div><div style="font-size:10px;color:#888;word-break:break-all">'+esc(b.link.slice(0,44))+'</div></div></div>';
+  }).join('')||'<div style="font-size:12px;color:#888;padding:8px">該当なし</div>';
+}
+function bnDoAdd(bkEnc){
+  var bk=decodeURIComponent(bkEnc),b=findBanner(bk);if(!b||!bnAddTargetPid)return;
+  var base=getEditBase(bnAddTargetPid);if(!base)return;
+  setEdit(bnAddTargetPid,{pc:bannerForCol('pc',b.link,b.img)+'<br>'+base.pc,sp:bannerForCol('sp',b.link,b.img)+base.sp,sv:bannerForCol('sv',b.link,b.img)+base.sv});
+  applyEditToProduct(bnAddTargetPid);
+  document.getElementById('bnAddModal').style.display='none';
+  alert('バナーを追加リストに登録しました（上部から一括CSV出力できます）');
+  drawBanner();
+}
+// 商品の既存バナーが先頭側・末尾側に何個あるか数える
+function countExistingBanners(p){
+  var base=getEditBase(p.id);if(!base)return{top:0,bottom:0};
+  // PC販売説明文を基準に、先頭/末尾から連続するバナーブロックを数える
+  var html=base.sv||base.pc||'';
+  // バナーブロックのパターン（<CENTER>table</CENTER> または 単純a+img）
+  var bannerRe=/^\s*(?:<br\s*\/?>\s*)*(?:<CENTER>[\s\S]*?<\/table>\s*<\/CENTER>|<a\s+href="[^"]*"[^>]*>\s*<IMG[^>]*>\s*<\/a>|<a\s+href="[^"]*"[^>]*>\s*<img[^>]*>\s*<\/a>)/i;
+  var tailRe=/(?:<CENTER>[\s\S]*?<\/table>\s*<\/CENTER>|<a\s+href="[^"]*"[^>]*>\s*<IMG[^>]*>\s*<\/a>|<a\s+href="[^"]*"[^>]*>\s*<img[^>]*>\s*<\/a>)\s*(?:<br\s*\/?>\s*)*$/i;
+  var top=0,rest=html,mm;
+  while((mm=bannerRe.exec(rest))!==null){top++;rest=rest.slice(mm[0].length);if(top>10)break;}
+  var bottom=0;
+  while((mm=tailRe.exec(rest))!==null){bottom++;rest=rest.slice(0,mm.index);if(bottom>10)break;}
+  return{top:top,bottom:bottom};
+}
+// 編集を商品データに反映（バナー再解析）
+function applyEditToProduct(pid){
+  var p=DATA.products.find(function(x){return x.id===pid;});if(!p)return;
+  var e=DATA.edits[pid];if(!e)return;
+  var allIds=Object.keys(DATA.idInfo);
+  var ab=getBanners(e.pc,'PC説明文',allIds).concat(getBanners(e.sp,'SP説明文',allIds),getBanners(e.sv,'PC販売説明文',allIds));
+  var lm={};ab.forEach(function(b){if(!lm[b.link])lm[b.link]=Object.assign({},b,{fields:[b.field]});else if(lm[b.link].fields.indexOf(b.field)<0)lm[b.link].fields.push(b.field);});
+  p.banners=Object.values(lm).map(function(b){var d=getDstId(b.link),info=d?DATA.idInfo[d]:null;return Object.assign({},b,{dstId:d||null,dstNo:info?info.no:null,dstName:info?info.name:null});});
+  p.outboundCount=p.banners.length;
+}
+
+// ===== タブ2: 回遊元 =====
+function inboundTable(inbound,sortKey,dstId){
+  var arr=inbound.slice();
+  if(sortKey==='pv_desc')arr.sort(function(a,b){return (DATA.accessMap[b.srcId]||0)-(DATA.accessMap[a.srcId]||0);});
+  else if(sortKey==='pv_asc')arr.sort(function(a,b){return (DATA.accessMap[a.srcId]||0)-(DATA.accessMap[b.srcId]||0);});
+  return '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:#f4f6fb"><th style="padding:6px 6px;font-size:11px;color:#888;text-align:left"></th><th style="padding:6px 8px;font-size:11px;color:#888;text-align:left">商品番号</th><th style="padding:6px 8px;font-size:11px;color:#888;text-align:left">管理番号</th><th style="padding:6px 8px;font-size:11px;color:#e65100;text-align:left">PV</th></tr></thead><tbody>'+arr.map(function(s,i){var spv=DATA.accessMap[s.srcId];return '<tr><td style="padding:6px 6px;border-bottom:1px solid #f5f5f5"><input type="checkbox" class="ib-chk" data-dst="'+esc(dstId||'')+'" data-src="'+esc(s.srcId)+'" style="width:15px;height:15px"></td><td style="padding:6px 8px;font-size:12px;font-weight:600;border-bottom:1px solid #f5f5f5">'+esc(s.srcNo||s.srcId)+'</td><td style="padding:6px 8px;font-size:11px;color:#555;border-bottom:1px solid #f5f5f5">'+esc(s.srcId)+'</td><td style="padding:6px 8px;font-size:12px;font-weight:600;color:#e65100;border-bottom:1px solid #f5f5f5">'+(spv!=null?spv.toLocaleString():'—')+'</td></tr>';}).join('')+'</tbody></table>';
+}
+function sortInboundRows(btn,pid,key){
+  var p=DATA.products.find(function(x){return x.id===pid;});
+  if(!p)return;
+  document.getElementById('ibrows_'+pid).innerHTML=inboundTable(p.inbound,key,pid);
+  var par=btn.parentElement;par.querySelectorAll('.ib-sort').forEach(function(b){b.style.background='#fff';b.style.color='#333';b.style.borderColor='#ccc';});
+  btn.style.background='#e65100';btn.style.color='#fff';btn.style.borderColor='#e65100';
+}
+var inState={filter:'all',sort:'default',q:''};
+var inSrcSort={};
+function setSrcSort(id,mode){inSrcSort[id]=mode;drawInbound();}
+function renderInbound(){
+  document.getElementById('empty-inbound').style.display='none';
+  var withIn=DATA.products.filter(function(p){return p.inboundCount>0;}).length;
+  var noIn=DATA.products.length-withIn;
+  var maxIn=DATA.products.reduce(function(m,p){return Math.max(m,p.inboundCount);},0);
+  document.getElementById('body-inbound').innerHTML=
+    '<div class="stats" style="grid-template-columns:repeat(3,1fr)">'
+    +'<div class="stat"><div class="stat-label">回遊先あり</div><div class="stat-val" style="color:#1F3864">'+withIn.toLocaleString()+'</div></div>'
+    +'<div class="stat"><div class="stat-label">最大回遊元</div><div class="stat-val" style="color:#e65100">'+maxIn.toLocaleString()+'</div></div>'
+    +'<div class="stat"><div class="stat-label">回遊元なし</div><div class="stat-val" style="color:#9e9e9e">'+noIn.toLocaleString()+'</div></div></div>'
+    +'<div class="toolbar"><input class="search" id="in-q" placeholder="🔍 商品名・番号・管理番号で検索" oninput="inState.q=this.value;drawInbound()">'
+    +'<div class="ctrl-row">'
+    +'<button class="chip active" data-f="all" onclick="inSetF(\'all\',this)">全件</button>'
+    +'<button class="chip" data-f="100" onclick="inSetF(\'100\',this)">100件以上</button>'
+    +'<button class="chip" data-f="10" onclick="inSetF(\'10\',this)">10件以上</button>'
+    +'<button class="chip" data-f="none" onclick="inSetF(\'none\',this)">設定なし</button>'
+    +'<select class="sortsel" id="in-sort" onchange="inState.sort=this.value;drawInbound()">'+SORT_OPTS+'</select>'
+    +'</div></div><div class="count" id="in-count"></div><div id="in-list"></div>';
+  drawInbound();
+}
+function inSetF(f,btn){inState.filter=f;document.querySelectorAll('#body-inbound .chip').forEach(function(c){c.classList.remove('active');});btn.classList.add('active');drawInbound();}
+function drawInbound(){
+  var q=inState.q.toLowerCase().trim();
+  var arr=DATA.products.filter(function(p){
+    var c=p.inboundCount;
+    if(inState.filter==='100'&&c<100)return false;
+    if(inState.filter==='10'&&c<10)return false;
+    if(inState.filter==='none'&&c>0)return false;
+    if(q&&(p.no+' '+p.name+' '+p.id).toLowerCase().indexOf(q)<0)return false;
+    return true;
+  });
+  // デフォルトは回遊元多い順
+  if(inState.sort==='default')arr=sortProducts(arr,'in_desc');
+  else arr=sortProducts(arr,inState.sort);
+  document.getElementById('in-count').textContent=arr.length.toLocaleString()+'件表示';
+  document.getElementById('in-list').innerHTML=arr.map(function(p){
+    var c=p.inboundCount,col=c>=100?'#e65100':c>=10?'#1565c0':c>0?'#2e7d32':'#9e9e9e';
+    var left=c>=100?'#f57f17':c>=10?'#1565c0':c>0?'#4caf50':'#bbb';
+    var srcs=p.inbound.slice();
+    var psort=inSrcSort[p.id]||'default';
+    if(psort==='pv_desc')srcs.sort(function(a,b){return (DATA.accessMap[b.srcId]||0)-(DATA.accessMap[a.srcId]||0);});
+    else if(psort==='pv_asc')srcs.sort(function(a,b){return (DATA.accessMap[a.srcId]||0)-(DATA.accessMap[b.srcId]||0);});
+    var sortBtns=c>1?'<div style="margin-bottom:6px;display:flex;gap:5px;align-items:center"><span style="font-size:11px;color:#888">回遊元PV:</span><button onclick="event.stopPropagation();setSrcSort(\''+esc(p.id)+'\',\'pv_desc\')" style="font-size:10px;padding:3px 8px;border-radius:5px;border:1px solid '+(psort==='pv_desc'?'#e65100':'#ccc')+';background:'+(psort==='pv_desc'?'#e65100':'#fff')+';color:'+(psort==='pv_desc'?'#fff':'#555')+';cursor:pointer">多い順</button><button onclick="event.stopPropagation();setSrcSort(\''+esc(p.id)+'\',\'pv_asc\')" style="font-size:10px;padding:3px 8px;border-radius:5px;border:1px solid '+(psort==='pv_asc'?'#e65100':'#ccc')+';background:'+(psort==='pv_asc'?'#e65100':'#fff')+';color:'+(psort==='pv_asc'?'#fff':'#555')+';cursor:pointer">少ない順</button>'+(psort!=='default'?'<button onclick="event.stopPropagation();setSrcSort(\''+esc(p.id)+'\',\'default\')" style="font-size:10px;padding:3px 8px;border-radius:5px;border:1px solid #ccc;background:#fff;color:#888;cursor:pointer">解除</button>':'')+'</div>':'';
+    var body=c>0?'<div style="margin:8px 0 8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button onclick="ibDelChecked(\''+esc(p.id)+'\')" style="font-size:11px;padding:6px 12px;border-radius:6px;background:#c62828;color:#fff;border:none;cursor:pointer;font-weight:600">🗑 選択を削除</button><button onclick="ibOpenAdd(\''+esc(p.id)+'\')" style="font-size:11px;padding:6px 12px;border-radius:6px;background:#2e7d32;color:#fff;border:none;cursor:pointer;font-weight:600">➕ 回遊元追加</button><span style="font-size:11px;color:#888;margin-left:4px">PV:</span><button onclick="event.stopPropagation();sortInboundRows(this,\''+esc(p.id)+'\',\'pv_desc\')" class="ib-sort" style="font-size:11px;padding:4px 9px;border-radius:5px;border:1px solid #ccc;background:#fff;cursor:pointer">多い順</button><button onclick="event.stopPropagation();sortInboundRows(this,\''+esc(p.id)+'\',\'pv_asc\')" class="ib-sort" style="font-size:11px;padding:4px 9px;border-radius:5px;border:1px solid #ccc;background:#fff;cursor:pointer">少ない順</button></div><div id="ibrows_'+esc(p.id)+'">'+inboundTable(p.inbound,'default',p.id)+'</div>':'<div style="padding:10px 0;font-size:12px;color:#9e9e9e;font-style:italic">どの商品のバナーからも回遊されていません</div><div style="margin-top:8px"><button onclick="ibOpenAdd(\''+esc(p.id)+'\')" style="font-size:11px;padding:6px 12px;border-radius:6px;background:#2e7d32;color:#fff;border:none;cursor:pointer;font-weight:600">➕ 新規回遊元を追加</button></div>';
+    return '<div class="card" style="border-left-color:'+left+'"><div class="card-h" onclick="this.parentElement.classList.toggle(\'open\')"><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px"><span class="ino">'+esc(p.no||p.id)+'</span><span style="font-size:13px;font-weight:700;color:'+col+'">'+(c>0?c+'ページから回遊中':'回遊元なし')+'</span>'+(p.access!=null?'<span class="badge-s b-ac">PV'+p.access.toLocaleString()+'</span>':'')+(p.outboundCount?'<span class="badge-s b-out">回遊先'+p.outboundCount+'</span>':'')+'</div><div class="nm">'+esc(p.name.slice(0,48))+(p.name.length>48?'…':'')+'</div><div class="iid">管理番号: '+esc(p.id)+'</div></div><span class="chev">▼</span></div><div class="card-b">'+body+'</div></div>';
+  }).join('');
+}
+
+// 回遊元: 選択した回遊元を削除（src商品からdst商品へのバナーを削除）
+function ibDelChecked(dstId){
+  var box=document.getElementById('ibrows_'+dstId);
+  var chks=box?box.querySelectorAll('.ib-chk:checked'):[];
+  if(!chks.length){alert('削除する回遊元を選択してください');return;}
+  var cnt=0;
+  chks.forEach(function(c){
+    var srcId=c.getAttribute('data-src');
+    var base=getEditBase(srcId);if(!base)return;
+    var srcP=DATA.products.find(function(x){return x.id===srcId;});if(!srcP)return;
+    var pc=base.pc,sp=base.sp,sv=base.sv;
+    srcP.banners.forEach(function(b){if(b.dstId===dstId){pc=delBannerHtml(pc,b.link,b.img);sp=delBannerHtml(sp,b.link,b.img);sv=delBannerHtml(sv,b.link,b.img);}});
+    setEdit(srcId,{pc:pc,sp:sp,sv:sv});applyEditToProduct(srcId);cnt++;
+  });
+  alert(cnt+'件の回遊元を削除リストに追加しました');
+  recomputeInbound();drawInbound();
+}
+// 回遊元: 新規回遊元を追加（指定src商品に、このdst商品へのバナーを追加）
+var ibAddDstId=null;
+function ibOpenAdd(dstId){
+  ibAddDstId=dstId;
+  var dstP=DATA.products.find(function(x){return x.id===dstId;});
+  document.getElementById('ibAddDesc').innerHTML='この商品（<b>'+esc(dstP?dstP.no||dstId:dstId)+'</b>）へ誘導するバナーを、指定した商品（回遊元）に追加します。';
+  document.getElementById('ibAddImg').value='';
+  document.getElementById('ibAddIds').value='';
+  document.getElementById('ibAddPV').innerHTML='';
+  document.getElementById('ibAddModal').style.display='flex';
+}
+function ibDoAdd(){
+  var dstId=ibAddDstId;if(!dstId)return;
+  var img=document.getElementById('ibAddImg').value.trim();
+  if(!img){alert('画像URLを入力してください');return;}
+  var ids=document.getElementById('ibAddIds').value.split(/[,\s\n]+/).map(function(s){return s.trim();}).filter(function(s){return s;});
+  if(!ids.length){alert('回遊元にする商品の管理番号を入力してください');return;}
+  var link='https://item.rakuten.co.jp/'+(DATA.shopName||'beltaworks')+'/'+dstId+'/';
+  var nf=[];
+  ids.forEach(function(srcId){
+    var base=getEditBase(srcId);if(!base){nf.push(srcId);return;}
+    setEdit(srcId,{pc:bannerForCol('pc',link,img)+'<br>'+base.pc,sp:bannerForCol('sp',link,img)+base.sp,sv:bannerForCol('sv',link,img)+base.sv});
+    applyEditToProduct(srcId);
+  });
+  document.getElementById('ibAddModal').style.display='none';
+  alert('新規回遊元を追加リストに登録しました');
+  if(nf.length)alert('CSV内に見つからない管理番号:\n'+nf.join(', '));
+  recomputeInbound();
+  drawInbound();
+}
+// 回遊元マップを再計算
+function recomputeInbound(){
+  var inMap={};
+  DATA.products.forEach(function(p){p.banners.forEach(function(b){var d=b.dstId;if(!d)return;if(!inMap[d])inMap[d]=[];if(!inMap[d].find(function(x){return x.srcId===p.id;}))inMap[d].push({srcId:p.id,srcNo:p.no});});});
+  DATA.products.forEach(function(p){p.inbound=inMap[p.id]||[];p.inboundCount=p.inbound.length;});
+}
+
+// ===== タブ3: バナー一覧 =====
+var liState={sort:'count_desc',q:''};
+function renderList(){
+  document.getElementById('empty-list').style.display='none';
+  var totalUse=DATA.allBanners.reduce(function(s,b){return s+b.count;},0);
+  document.getElementById('body-list').innerHTML=
+    '<div class="stats" style="grid-template-columns:repeat(2,1fr)">'
+    +'<div class="stat"><div class="stat-label">バナー種類</div><div class="stat-val" style="color:#1F3864">'+DATA.allBanners.length.toLocaleString()+'</div></div>'
+    +'<div class="stat"><div class="stat-label">のべ使用数</div><div class="stat-val" style="color:#185FA5">'+totalUse.toLocaleString()+'</div></div></div>'
+    +'<div style="margin-bottom:8px"><button onclick="openNew()" style="width:100%;font-size:13px;padding:10px;border-radius:8px;background:#1F3864;color:#fff;border:none;cursor:pointer;font-weight:600">➕ 新規バナーを作成して商品に追加</button></div>'
+    +'<div id="li-selbar" style="display:none;background:#fff;border-radius:10px;padding:10px 12px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.08);align-items:center;gap:8px;flex-wrap:wrap"><span id="li-selcount" style="font-size:13px;font-weight:600;color:#1F3864">0件選択</span><button onclick="liSelAll()" style="font-size:12px;padding:5px 11px;border-radius:6px;border:1px solid #ccc;background:#fff;cursor:pointer">表示中を全選択</button><button onclick="liClrSel()" style="font-size:12px;padding:5px 11px;border-radius:6px;border:1px solid #ccc;background:#fff;cursor:pointer">解除</button><button onclick="openBulkAdd()" style="font-size:12px;padding:6px 13px;border-radius:6px;background:#2e7d32;color:#fff;border:none;cursor:pointer;font-weight:600;margin-left:auto">➕ 選択を商品に追加</button><button onclick="openBulkDel()" style="font-size:12px;padding:6px 13px;border-radius:6px;background:#c62828;color:#fff;border:none;cursor:pointer;font-weight:600">🗑 選択を商品から削除</button></div>'
+    +'<div class="toolbar"><input class="search" id="li-q" placeholder="🔍 リンク先・商品名・管理番号・画像URLで検索" oninput="liState.q=this.value;drawList()">'
+    +'<div class="ctrl-row"><select class="sortsel" id="li-sort" onchange="liState.sort=this.value;drawList()">'
+    +'<option value="count_desc">使用数多い順</option><option value="count_asc">使用数少ない順</option></select></div></div>'
+    +'<div class="count" id="li-count"></div><div id="li-list"></div>';
+  drawList();
+}
+function drawList(){
+  var q=liState.q.toLowerCase().trim();
+  var arr=DATA.allBanners.filter(function(b){if(!q)return true;return ((b.dstNo||'')+' '+(b.dstName||'')+' '+(b.dstId||'')+' '+b.link+' '+b.img).toLowerCase().indexOf(q)>=0;});
+  if(liState.sort==='count_asc')arr=arr.slice().sort(function(a,b){return a.count-b.count;});
+  else arr=arr.slice().sort(function(a,b){return b.count-a.count;});
+  document.getElementById('li-count').textContent=arr.length.toLocaleString()+'件表示';
+  document.getElementById('li-list').innerHTML=arr.map(function(b){
+    var dstLabel=b.dstNo?esc(b.dstNo)+'　'+esc((b.dstName||'').slice(0,22)):esc(b.kind);
+    var bk=b.link+'|'+b.img;
+    var checked=liSel[bk]?'checked':'';
+    var ex=b.itemList&&b.itemList.length?'<a href="https://item.rakuten.co.jp/'+esc(DATA.shopName)+'/'+esc(b.itemList[0])+'/" target="_blank" style="font-size:11px;color:#185FA5;text-decoration:none;font-weight:600">🔍 使用例を見る↗</a>':'';
+    return '<div class="card" style="border-left-color:#7b1fa2;padding:12px">'
+    +'<div style="display:flex;gap:10px;align-items:flex-start">'
+    +'<input type="checkbox" class="chk" '+checked+' onchange="liToggle(\''+encodeURIComponent(bk)+'\',this.checked)" style="margin-top:2px">'
+    +'<div style="width:72px;height:72px;flex-shrink:0;border-radius:8px;overflow:hidden;background:#f0f0f0;border:1px solid #eee"><img src="'+esc(b.img)+'" loading="lazy" referrerpolicy="no-referrer" data-fb="0" data-orig="'+esc(b.img)+'" onerror="imgFB(this)" style="width:100%;height:100%;object-fit:cover"></div>'
+    +'<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:700;color:#555;margin-bottom:3px">['+esc(b.kind)+']</div><div style="font-size:13px;font-weight:700;color:#1F3864">'+dstLabel+'</div><div style="font-size:11px;color:#888;word-break:break-all;margin:3px 0">'+esc(b.link)+'</div><span style="font-size:11px;color:#185FA5;background:#e3f2fd;border-radius:4px;padding:1px 7px">'+b.count+'商品で使用</span> '+ex+'</div></div>'
+    +'<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button onclick="openImgEdit(\''+encodeURIComponent(bk)+'\')" style="font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid #7b1fa2;background:#fff;color:#7b1fa2;cursor:pointer;font-weight:600">🖼 画像変更</button><button onclick="openAddTo(\''+encodeURIComponent(bk)+'\')" style="font-size:11px;padding:5px 10px;border-radius:6px;border:none;background:#2e7d32;color:#fff;cursor:pointer;font-weight:600">➕ 別商品に追加</button><button onclick="openDelFrom(\''+encodeURIComponent(bk)+'\')" style="font-size:11px;padding:5px 10px;border-radius:6px;border:none;background:#c62828;color:#fff;cursor:pointer;font-weight:600">🗑 使用商品から削除</button><button onclick="toggleUsage(this,\''+encodeURIComponent(bk)+'\')" style="font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid #ccc;background:#fff;color:#555;cursor:pointer;font-weight:600">📋 使用商品'+b.count+'件</button></div>'
+    +'<div class="usage-box" style="display:none;margin-top:8px;max-height:300px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:8px"></div>'
+    +'</div>';
+  }).join('');
+  updateLiSelBar();
+}
+// 使用商品一覧の展開
+function toggleUsage(btn,bkEnc){
+  var box=btn.parentElement.nextElementSibling;
+  if(box.style.display!=='none'){box.style.display='none';return;}
+  var bk=decodeURIComponent(bkEnc),b=findBanner(bk);
+  if(!b){return;}
+  // このバナー専用のグローバル一時領域に使用商品を保存
+  window._usageCur={bk:bk,link:b.link,img:b.img};
+  var list=b.itemList.map(function(id){var info=DATA.idInfo[id]||{};return {id:id,no:info.no||'',name:info.name||'',access:DATA.accessMap[id]};});
+  list.sort(function(x,y){return (y.access||0)-(x.access||0);});
+  box.innerHTML='<div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px">使用商品（PV多い順・'+list.length+'件）</div>'
+    +'<div style="margin-bottom:6px"><button onclick="usageSelAll(this)" style="font-size:11px;padding:4px 9px;border-radius:5px;border:1px solid #ccc;background:#fff;cursor:pointer;margin-right:4px">全選択</button><button onclick="usageSelNone(this)" style="font-size:11px;padding:4px 9px;border-radius:5px;border:1px solid #ccc;background:#fff;cursor:pointer">解除</button></div>'
+    +'<div class="usage-box" style="max-height:300px;overflow-y:auto;border:1px solid #eee;border-radius:6px">'+list.map(function(it){
+    var ac=it.access!=null?it.access.toLocaleString():'—';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid #f5f5f5"><input type="checkbox" class="usage-chk" value="'+esc(it.id)+'" style="width:15px;height:15px;flex-shrink:0"><div style="min-width:0;flex:1"><span style="font-size:11px;font-weight:600;color:#1F3864">'+esc(it.no||it.id)+'</span> <span style="font-size:11px;color:#888">'+esc(it.name.slice(0,16))+'</span><div style="font-size:10px;color:#bbb">'+esc(it.id)+'</div></div><span style="font-size:11px;font-weight:600;color:#e65100;white-space:nowrap">PV '+ac+'</span></div>';
+  }).join('')+'</div>'
+    +'<button onclick="usageDelChecked(this)" style="font-size:11px;padding:6px 12px;border-radius:6px;background:#c62828;color:#fff;border:none;cursor:pointer;font-weight:600;margin-top:8px">🗑 選択商品からこのバナーを削除</button>';
+  box.style.display='block';
+}
+function usageSelAll(btn){btn.closest('.usedlist').querySelectorAll('.usage-chk').forEach(function(c){c.checked=true;});}
+function usageSelNone(btn){btn.closest('.usedlist').querySelectorAll('.usage-chk').forEach(function(c){c.checked=false;});}
+function usageDelChecked(btn){
+  var cur=window._usageCur;if(!cur){alert('エラー: バナー情報が取得できません');return;}
+  var box=btn.closest('.usedlist');
+  var chks=box.querySelectorAll('.usage-chk:checked');
+  if(!chks.length){alert('削除する商品を選択してください');return;}
+  var cnt=0;
+  chks.forEach(function(c){
+    var id=c.value,base=getEditBase(id);if(!base)return;
+    setEdit(id,{pc:delBannerHtml(base.pc,cur.link,cur.img),sp:delBannerHtml(base.sp,cur.link,cur.img),sv:delBannerHtml(base.sv,cur.link,cur.img)});
+    applyEditToProduct(id);cnt++;
+  });
+  alert(cnt+'件の商品からバナーを削除リストに追加しました');
+  recomputeInbound();collectBanners();drawList();
+}
+// チェックボックス選択
+var liSel={};
+function liToggle(bkEnc,on){var bk=decodeURIComponent(bkEnc);if(on)liSel[bk]=true;else delete liSel[bk];updateLiSelBar();}
+function liSelAll(){document.querySelectorAll('#li-list .chk').forEach(function(c){c.checked=true;});DATA.allBanners.forEach(function(b){var bk=b.link+'|'+b.img;});var q=liState.q.toLowerCase().trim();DATA.allBanners.forEach(function(b){var t=((b.dstNo||'')+' '+(b.dstName||'')+' '+(b.dstId||'')+' '+b.link+' '+b.img).toLowerCase();if(!q||t.indexOf(q)>=0)liSel[b.link+'|'+b.img]=true;});updateLiSelBar();}
+function liClrSel(){liSel={};document.querySelectorAll('#li-list .chk').forEach(function(c){c.checked=false;});updateLiSelBar();}
+function updateLiSelBar(){var cnt=Object.keys(liSel).length;var bar=document.getElementById('li-selbar');if(bar){bar.style.display=cnt>0?'flex':'none';document.getElementById('li-selcount').textContent=cnt+'件選択';}}
+function getSelBanners(){return DATA.allBanners.filter(function(b){return liSel[b.link+'|'+b.img];});}
+function imgFB(img){var s=parseInt(img.getAttribute('data-fb')||'0'),o=img.getAttribute('data-orig');if(s===0){img.setAttribute('data-fb','1');img.src='https://images.weserv.nl/?url='+encodeURIComponent(o.replace(/^https?:\/\//,''))+'&w=160&h=160&fit=cover';}else if(s===1){img.setAttribute('data-fb','2');img.src='https://wsrv.nl/?url='+encodeURIComponent(o.replace(/^https?:\/\//,''))+'&w=160&h=160&fit=cover';}else{img.parentElement.innerHTML='<div style="font-size:9px;color:#bbb;text-align:center;padding-top:28px;line-height:1.4">画像は<br>商品ページ<br>で確認</div>';}}
+
+// ===== 画像URL変更 =====
+var curEditBanner=null;
+function findBanner(bk){return DATA.allBanners.find(function(b){return (b.link+'|'+b.img)===bk;});}
+function openImgEdit(bkEnc){
+  var bk=decodeURIComponent(bkEnc);curEditBanner=findBanner(bk);
+  if(!curEditBanner)return;
+  document.getElementById('imgEditDesc').innerHTML='現在: '+esc(curEditBanner.dstNo||curEditBanner.kind)+'<br><span style="font-size:11px;color:#888;word-break:break-all">'+esc(curEditBanner.img)+'</span><br>使用商品数: '+curEditBanner.count+'件';
+  document.getElementById('imgEditNew').value='';
+  document.getElementById('imgEditModal').style.display='flex';
+}
+function dlImgEdit(){
+  var newImg=document.getElementById('imgEditNew').value.trim();
+  if(!newImg){alert('新しい画像URLを入力してください');return;}
+  if(!curEditBanner)return;
+  var oldImg=curEditBanner.img,cnt=0;
+  DATA.products.forEach(function(p){
+    var base=getEditBase(p.id);if(!base)return;
+    var ch=false;
+    function rep(h){if(h.indexOf(oldImg)>=0){ch=true;return h.split(oldImg).join(newImg);}return h;}
+    var pc=rep(base.pc),sp=rep(base.sp),sv=rep(base.sv);
+    if(ch){setEdit(p.id,{pc:pc,sp:sp,sv:sv});applyEditToProduct(p.id);cnt++;}
+  });
+  if(!cnt){alert('対象商品が見つかりませんでした');return;}
+  recomputeInbound();collectBanners();drawList();
+  alert(cnt+'商品の画像を差し替えました（上部から一括CSV出力できます）');
+  document.getElementById('imgEditModal').style.display='none';
+}
+
+// ===== このバナーを別商品に追加 =====
+var curAddBanner=null;
+function openAddTo(bkEnc){
+  var bk=decodeURIComponent(bkEnc);curAddBanner=findBanner(bk);curBulkBanners=null;
+  if(!curAddBanner)return;
+  document.getElementById('addToDesc').innerHTML='追加するバナー: <b>'+esc(curAddBanner.dstNo||curAddBanner.kind)+'</b><br><span style="font-size:11px;color:#888;word-break:break-all">'+esc(curAddBanner.link)+'</span>';
+  document.getElementById('addToSearch').value='';
+  document.getElementById('addToResult').innerHTML='';
+  document.getElementById('addToIds').value='';
+  document.getElementById('addToModal').style.display='flex';
+}
+function searchAddTo(){
+  var q=(document.getElementById('addToSearch').value||'').toLowerCase().trim();
+  var box=document.getElementById('addToResult');
+  if(!q){box.innerHTML='';return;}
+  var hits=DATA.products.filter(function(p){return (p.name+' '+p.no+' '+p.id).toLowerCase().indexOf(q)>=0;});
+  hits.sort(function(a,b){return (b.access||0)-(a.access||0)||b.inboundCount-a.inboundCount;});
+  if(!hits.length){box.innerHTML='<div style="font-size:12px;color:#888;padding:8px">該当商品なし</div>';return;}
+  box.innerHTML=hits.slice(0,50).map(function(h){
+    var ac=h.access!=null?h.access.toLocaleString()+'人':'—';
+    // この商品の既存バナー
+    var ex=h.banners.length?h.banners.map(function(bn){return '<div style="font-size:10px;color:#777;margin-top:1px">・'+esc(bn.dstNo||bn.kind)+'</div>';}).join(''):'<div style="font-size:10px;color:#bbb;margin-top:1px">バナーなし</div>';
+    return '<div style="border-bottom:1px solid #f0f0f0;padding:7px 8px"><div onclick="addToTarget(\''+esc(h.id)+'\')" style="display:flex;gap:8px;align-items:center;cursor:pointer"><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:#1F3864">'+esc(h.no||h.id)+' <span style="font-weight:400;color:#888">'+esc(h.name.slice(0,18))+'</span></div><div style="font-size:11px;color:#888;margin-top:2px">管理番号: '+esc(h.id)+'　PV:<b style="color:#e65100">'+ac+'</b>　回遊先:<b style="color:#185FA5">'+h.outboundCount+'</b></div></div><span style="font-size:18px;color:#2e7d32">＋</span></div><div style="margin-top:4px;padding-left:2px"><div style="font-size:10px;font-weight:600;color:#999">既存バナー('+h.banners.length+')</div>'+ex+'</div></div>';
+  }).join('')+(hits.length>50?'<div style="font-size:11px;color:#888;padding:6px">…他'+(hits.length-50)+'件</div>':'');
+}
+function addToTarget(id){var ta=document.getElementById('addToIds');var ids=ta.value.trim()?ta.value.split(/[,\s\n]+/).map(function(s){return s.trim();}).filter(function(s){return s;}):[];if(ids.indexOf(id)<0){ids.push(id);ta.value=ids.join(', ');}previewAddTo();}
+function previewAddTo(){
+  var ids=document.getElementById('addToIds').value.split(/[,\s\n]+/).map(function(s){return s.trim();}).filter(function(s){return s;});
+  var box=document.getElementById('addToPreview');
+  if(!ids.length){box.innerHTML='';return;}
+  box.innerHTML='<div style="font-size:11px;font-weight:600;color:#555;margin-bottom:4px">追加先の確認</div>'+ids.map(function(id){
+    var p=DATA.products.find(function(x){return x.id===id;});
+    if(!p)return '<div style="font-size:11px;color:#c62828;padding:3px 0">・'+esc(id)+' <span style="color:#888">→ CSV内に見つかりません</span></div>';
+    var ac=p.access!=null?p.access.toLocaleString()+'人':'PV不明';
+    return '<div style="font-size:11px;color:#333;padding:3px 0;border-bottom:1px solid #f5f5f5">・'+esc(id)+' <span style="color:#888">'+esc(p.name.slice(0,16))+'</span> <b style="color:#e65100">PV '+ac+'</b> <span style="color:#185FA5">回遊先'+p.outboundCount+'</span></div>';
+  }).join('');
+}
+function dlAddTo(){
+  if(!curAddBanner)return;
+  var ids=document.getElementById('addToIds').value.split(/[,\s\n]+/).map(function(s){return s.trim();}).filter(function(s){return s;});
+  if(!ids.length){alert('追加先の管理番号を入力してください');return;}
+  var pos=document.querySelector('input[name=addToPos]:checked').value;
+  var b=curAddBanner,nf=[],cnt=0;
+  ids.forEach(function(id){
+    var base=getEditBase(id);if(!base){nf.push(id);return;}
+    var pc=base.pc,sp=base.sp,sv=base.sv;
+    if(pos==='top'){pc=bannerForCol('pc',b.link,b.img)+'<br>'+pc;sp=bannerForCol('sp',b.link,b.img)+sp;sv=bannerForCol('sv',b.link,b.img)+sv;}
+    else{pc=pc+'<br>'+bannerForCol('pc',b.link,b.img);sp=sp+bannerForCol('sp',b.link,b.img);sv=sv+bannerForCol('sv',b.link,b.img);}
+    setEdit(id,{pc:pc,sp:sp,sv:sv});applyEditToProduct(id);cnt++;
+  });
+  if(!cnt){alert('指定した管理番号がCSV内に見つかりませんでした');return;}
+  recomputeInbound();collectBanners();drawList();
+  alert(cnt+'商品にバナーを追加しました（上部から一括CSV出力できます）');
+  if(nf.length)alert('CSV内に見つからない管理番号:\n'+nf.join(', '));
+  document.getElementById('addToModal').style.display='none';
+}
+
+// 管理番号入力でPV一覧表示（共通）
+function showIdsPV(taId,boxId){
+  var ids=document.getElementById(taId).value.split(/[,\s\n]+/).map(function(s){return s.trim();}).filter(function(s){return s;});
+  var box=document.getElementById(boxId);
+  if(!box)return;
+  if(!ids.length){box.innerHTML='';return;}
+  box.innerHTML='<div style="border:1px solid #eee;border-radius:8px;max-height:160px;overflow-y:auto;background:#fafafa">'+ids.map(function(id){
+    var info=DATA.idInfo[id],pv=DATA.accessMap[id];
+    if(!info)return '<div style="padding:5px 9px;font-size:11px;color:#c62828;border-bottom:1px solid #f0f0f0">'+esc(id)+' … CSV内に該当なし</div>';
+    return '<div style="padding:5px 9px;font-size:11px;border-bottom:1px solid #f0f0f0;display:flex;gap:8px;align-items:center"><b style="color:#1F3864">'+esc(id)+'</b><span style="color:#888;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc((info.name||'').slice(0,20))+'</span><span style="color:#e65100;font-weight:600">PV '+(pv!=null?pv.toLocaleString():'—')+'</span></div>';
+  }).join('')+'</div>';
+}
+// バナーHTML削除ヘルパー
+function removeBannerFromHtml(html,link,img){
+  if(!html)return '';
+  var re=new RegExp('<a\\s+href=["\']'+escRe(link)+'["\'][^>]*>\\s*<img\\s[^>]*src=["\']'+escRe(img)+'["\'][^>]*>\\s*<\\/a>','gi');
+  return html.replace(re,'').replace(/^\s*(<br\s*\/?>\s*)+/i,'').trim();
+}
+// 単体バナーを商品から削除
+function dlDelFrom(){
+  if(!curAddBanner)return;var b=curAddBanner;
+  var ids=document.getElementById('delFromIds').value.split(/[,\s\n]+/).map(function(s){return s.trim();}).filter(function(s){return s;});
+  var targetIds={};
+  if(ids.length)ids.forEach(function(id){targetIds[id]=true;});else b.itemList.forEach(function(id){targetIds[id]=true;});
+  var cnt=0;
+  Object.keys(targetIds).forEach(function(id){var base=getEditBase(id);if(!base)return;setEdit(id,{pc:delBannerHtml(base.pc,b.link,b.img),sp:delBannerHtml(base.sp,b.link,b.img),sv:delBannerHtml(base.sv,b.link,b.img)});applyEditToProduct(id);cnt++;});
+  if(!cnt){alert('対象商品が見つかりませんでした');return;}
+  recomputeInbound();collectBanners();drawList();
+  alert(cnt+'商品からバナーを削除しました（上部から一括CSV出力できます）');
+  document.getElementById('delFromModal').style.display='none';
+}
+// 一括追加
+function dlBulkAdd(){
+  var sel=getSelBanners();
+  var ids=document.getElementById('bulkAddIds').value.split(/[,\s\n]+/).map(function(s){return s.trim();}).filter(function(s){return s;});
+  if(!ids.length){alert('追加先の管理番号を入力してください');return;}
+  var pos=document.querySelector('input[name=bulkAddPos]:checked').value;
+  var nf=[],cnt=0;
+  ids.forEach(function(id){
+    var base=getEditBase(id);if(!base){nf.push(id);return;}
+    var pc=base.pc,sp=base.sp,sv=base.sv;
+    if(pos==='top'){
+      sel.slice().reverse().forEach(function(b){pc=bannerForCol('pc',b.link,b.img)+'<br>'+pc;sp=bannerForCol('sp',b.link,b.img)+sp;sv=bannerForCol('sv',b.link,b.img)+sv;});
+    }else{
+      sel.forEach(function(b){pc=pc+'<br>'+bannerForCol('pc',b.link,b.img);sp=sp+bannerForCol('sp',b.link,b.img);sv=sv+bannerForCol('sv',b.link,b.img);});
+    }
+    setEdit(id,{pc:pc,sp:sp,sv:sv});applyEditToProduct(id);cnt++;
+  });
+  if(!cnt){alert('指定した管理番号がCSV内に見つかりませんでした');return;}
+  recomputeInbound();collectBanners();drawList();
+  alert(cnt+'商品に'+sel.length+'件のバナーを追加しました（上部から一括CSV出力できます）');
+  if(nf.length)alert('CSV内に見つからない管理番号:\n'+nf.join(', '));
+  document.getElementById('bulkAddModal').style.display='none';
+}
+// 一括削除
+function dlBulkDel(){
+  var sel=getSelBanners();
+  var ids=document.getElementById('bulkDelIds').value.split(/[,\s\n]+/).map(function(s){return s.trim();}).filter(function(s){return s;});
+  var targetIds={};
+  if(ids.length)ids.forEach(function(id){targetIds[id]=true;});else sel.forEach(function(b){b.itemList.forEach(function(id){targetIds[id]=true;});});
+  var cnt=0;
+  Object.keys(targetIds).forEach(function(id){var base=getEditBase(id);if(!base)return;var pc=base.pc,sp=base.sp,sv=base.sv;sel.forEach(function(b){pc=delBannerHtml(pc,b.link,b.img);sp=delBannerHtml(sp,b.link,b.img);sv=delBannerHtml(sv,b.link,b.img);});setEdit(id,{pc:pc,sp:sp,sv:sv});applyEditToProduct(id);cnt++;});
+  if(!cnt){alert('対象商品が見つかりませんでした');return;}
+  recomputeInbound();collectBanners();drawList();
+  alert(cnt+'商品からバナーを削除しました（上部から一括CSV出力できます）');
+  document.getElementById('bulkDelModal').style.display='none';
+}
+// ===== 使用商品から削除（単一バナー） =====
+var curDelBanner=null;
+function openDelFrom(bkEnc){
+  var bk=decodeURIComponent(bkEnc);curDelBanner=findBanner(bk);
+  if(!curDelBanner)return;
+  if(!confirm('このバナーを使用している'+curDelBanner.count+'商品すべてから削除したCSVを出力します。よろしいですか？'))return;
+  delBannersCSV([curDelBanner],null,'バナー削除_更新用CSV.csv');
+}
+// 共通：指定バナー群を、対象商品(idsがnullなら全使用商品)から削除
+function delBannersCSV(bannerList,ids,fname){
+  var targetIds={};
+  if(ids&&ids.length){ids.forEach(function(id){targetIds[id]=true;});}
+  else{bannerList.forEach(function(b){b.itemList.forEach(function(id){targetIds[id]=true;});});}
+  var cnt=0;
+  Object.keys(targetIds).forEach(function(id){
+    var base=getEditBase(id);if(!base)return;
+    var pc=base.pc,sp=base.sp,sv=base.sv;
+    bannerList.forEach(function(b){pc=delBannerHtml(pc,b.link,b.img);sp=delBannerHtml(sp,b.link,b.img);sv=delBannerHtml(sv,b.link,b.img);});
+    setEdit(id,{pc:pc,sp:sp,sv:sv});applyEditToProduct(id);cnt++;
+  });
+  if(!cnt){alert('対象商品が見つかりませんでした');return;}
+  recomputeInbound();collectBanners();drawList();
+  alert(cnt+'商品からバナーを削除しました（上部から一括CSV出力できます）');
+}
+function escRe(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+
+// ===== 一括：選択バナーを商品に追加 =====
+function openBulkAdd(){
+  var sel=getSelBanners();
+  if(!sel.length){alert('バナーを選択してください');return;}
+  curAddBanner=null;curBulkBanners=sel;
+  document.getElementById('addToDesc').innerHTML='追加するバナー: <b>'+sel.length+'件</b>（選択中）';
+  document.getElementById('addToSearch').value='';document.getElementById('addToResult').innerHTML='';
+  document.getElementById('addToIds').value='';document.getElementById('addToPreview').innerHTML='';
+  document.getElementById('addToModal').style.display='flex';
+}
+var curBulkBanners=null;
+
+// ===== 一括：選択バナーを使用商品から削除 =====
+function openBulkDel(){
+  var sel=getSelBanners();
+  if(!sel.length){alert('バナーを選択してください');return;}
+  var total=0;sel.forEach(function(b){total+=b.count;});
+  if(!confirm('選択した'+sel.length+'件のバナーを、使用している全商品から削除したCSVを出力します。よろしいですか？'))return;
+  delBannersCSV(sel,null,'バナー一括削除_更新用CSV.csv');
+}
+
+
+document.getElementById('addToModal').addEventListener('click',function(e){if(e.target===this)this.style.display='none';});
+
+// ===== 新規バナー作成 =====
+function openNew(){
+  document.getElementById('slots').innerHTML=[['top1','先頭①'],['top2','先頭②'],['top3','先頭③'],['bot1','末尾①'],['bot2','末尾②'],['bot3','末尾③']].map(function(p){
+    var k=p[0];
+    return '<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px;margin-bottom:8px;background:#fafafa"><div style="font-size:12px;font-weight:700;color:#1F3864;margin-bottom:6px">'+p[1]+'</div>'
+      +'<select id="m_'+k+'" onchange="document.getElementById(\''+k+'_id\').style.display=this.value==\'id\'?\'block\':\'none\';document.getElementById(\''+k+'_url\').style.display=this.value==\'url\'?\'block\':\'none\'" style="font-size:12px;padding:6px;border-radius:6px;border:1px solid #ddd;margin-bottom:6px"><option value="id">管理番号から生成</option><option value="url">URL直接</option></select>'
+      +'<input type="text" id="'+k+'_id" placeholder="回遊先の管理番号" style="width:100%;font-size:12px;padding:7px 9px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box;margin-bottom:6px">'
+      +'<input type="text" id="'+k+'_url" placeholder="リンク先URL" style="display:none;width:100%;font-size:12px;padding:7px 9px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box;margin-bottom:6px">'
+      +'<input type="text" id="'+k+'_img" placeholder="画像URL" style="width:100%;font-size:12px;padding:7px 9px;border-radius:6px;border:1px solid #ddd;box-sizing:border-box">'
+    +'</div>';
+  }).join('');
+  document.getElementById('prodSearch').value='';
+  document.getElementById('prodResult').innerHTML='';
+  document.getElementById('targetIds').value='';
+  document.getElementById('newModal').style.display='flex';
+}
+function closeNew(){document.getElementById('newModal').style.display='none';}
+function searchProd(){
+  var q=(document.getElementById('prodSearch').value||'').toLowerCase().trim();
+  var box=document.getElementById('prodResult');
+  if(!q){box.innerHTML='';return;}
+  var hits=DATA.products.filter(function(p){return (p.name+' '+p.no+' '+p.id).toLowerCase().indexOf(q)>=0;});
+  hits.sort(function(a,b){return (b.access||0)-(a.access||0)||b.inboundCount-a.inboundCount;});
+  if(!hits.length){box.innerHTML='<div style="font-size:12px;color:#888;padding:8px">該当商品なし</div>';return;}
+  box.innerHTML=hits.slice(0,50).map(function(h){
+    var ac=h.access!=null?h.access.toLocaleString()+'人':'—';
+    return '<div onclick="addTarget(\''+esc(h.id)+'\')" style="display:flex;gap:8px;align-items:center;padding:7px 8px;border-bottom:1px solid #f0f0f0;cursor:pointer"><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:#1F3864">'+esc(h.no||h.id)+' <span style="font-weight:400;color:#888">'+esc(h.name.slice(0,20))+'</span></div><div style="font-size:11px;color:#888;margin-top:2px">管理番号: '+esc(h.id)+'　回遊先:<b style="color:#185FA5">'+h.outboundCount+'</b>　回遊元:<b style="color:#1565c0">'+h.inboundCount+'</b>　PV:<b style="color:#e65100">'+ac+'</b></div></div><span style="font-size:18px;color:#2e7d32">＋</span></div>';
+  }).join('')+(hits.length>50?'<div style="font-size:11px;color:#888;padding:6px">…他'+(hits.length-50)+'件</div>':'');
+}
+function addTarget(id){var ta=document.getElementById('targetIds');var ids=ta.value.trim()?ta.value.split(/[,\s\n]+/).map(function(s){return s.trim();}).filter(function(s){return s;}):[];if(ids.indexOf(id)<0){ids.push(id);ta.value=ids.join(', ');}}
+function dlNew(){
+  // slotBannerはlink/imgを返すよう変更済み。{link,img}の配列に
+  var tops=[slotInfo('top1'),slotInfo('top2'),slotInfo('top3')].filter(function(x){return x;});
+  var bots=[slotInfo('bot1'),slotInfo('bot2'),slotInfo('bot3')].filter(function(x){return x;});
+  if(!tops.length&&!bots.length){alert('少なくとも1枠は画像URLとリンクを入力してください');return;}
+  var ids=document.getElementById('targetIds').value.split(/[,\s\n]+/).map(function(s){return s.trim();}).filter(function(s){return s;});
+  if(!ids.length){alert('追加先の管理番号を入力してください');return;}
+  // 既存バナー数と合わせて先頭3・末尾3を超えないかチェック
+  var over=[];
+  ids.forEach(function(id){
+    var p=DATA.products.find(function(x){return x.id===id;});if(!p)return;
+    var ex=countExistingBanners(p);
+    if(ex.top+tops.length>3||ex.bottom+bots.length>3)over.push(id+'(既存 先頭'+ex.top+'/末尾'+ex.bottom+')');
+  });
+  if(over.length){if(!confirm('次の商品は既存バナーと合わせて先頭3個・末尾3個を超えます:\n'+over.join('\n')+'\n\nこのまま追加しますか？'))return;}
+  var nf=[],cnt=0;
+  ids.forEach(function(id){
+    var base=getEditBase(id);if(!base){nf.push(id);return;}
+    var pc=base.pc,sp=base.sp,sv=base.sv;
+    // 上バナー（複数）を先頭に、下バナーを末尾に。列別書式で。
+    tops.slice().reverse().forEach(function(b){
+      pc=bannerForCol('pc',b.link,b.img)+'<br>'+pc;
+      sp=bannerForCol('sp',b.link,b.img)+sp;
+      sv=bannerForCol('sv',b.link,b.img)+sv;
+    });
+    bots.forEach(function(b){
+      pc=pc+'<br>'+bannerForCol('pc',b.link,b.img);
+      sp=sp+bannerForCol('sp',b.link,b.img);
+      sv=sv+bannerForCol('sv',b.link,b.img);
+    });
+    setEdit(id,{pc:pc,sp:sp,sv:sv});applyEditToProduct(id);cnt++;
+  });
+  if(!cnt){alert('指定した管理番号がCSV内に見つかりませんでした');return;}
+  recomputeInbound();collectBanners();renderBanner();
+  alert(cnt+'商品に新規バナーを追加しました（上部の「全変更を一括CSV出力」から入力CSV形式で出力できます）');
+  if(nf.length)alert('CSV内に見つからない管理番号:\n'+nf.join(', '));
+  closeNew();
+}
+// スロットからlink/imgを取得
+function slotInfo(k){
+  var img=document.getElementById(k+'_img').value.trim();if(!img)return null;
+  var mode=document.getElementById('m_'+k).value,link='';
+  if(mode==='id'){var d=document.getElementById(k+'_id').value.trim();if(!d)return null;link='https://item.rakuten.co.jp/'+(DATA.shopName||'beltaworks')+'/'+d+'/';}
+  else{link=document.getElementById(k+'_url').value.trim();if(!link)return null;}
+  return {link:link,img:img};
+}
+document.getElementById('newModal').addEventListener('click',function(e){if(e.target===this)closeNew();});
+
+// ===== CSV出力（iOS対応）=====
+function dlCSV(rows,fname){
+  // 必要な場合のみクオート（カンマ・改行・ダブルクオートを含むセル）
+  function cell(c){c=String(c==null?'':c);if(/[",\r\n]/.test(c))return '"'+c.replace(/"/g,'""')+'"';return c;}
+  var csv=rows.map(function(r){return r.map(cell).join(',');}).join('\r\n');
+  // Shift-JIS(Windows-31J)で出力（楽天・ヤフーRMSはShift-JIS必須）
+  var blob;
+  try{
+    var sjis=Encoding.convert(Encoding.stringToCode(csv),{to:'SJIS',from:'UNICODE'});
+    blob=new Blob([new Uint8Array(sjis)],{type:'text/csv'});
+  }catch(e){
+    // フォールバック：UTF-8 BOM
+    blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  }
+  if(/iP(hone|ad|od)/.test(navigator.userAgent)){
+    var reader=new FileReader();
+    reader.onload=function(){var w=window.open();if(w){w.document.write('<title>'+fname+'</title><p style=\"font-family:sans-serif;padding:16px;font-size:15px\">下のリンクを長押し→保存してください。<br><br><a href=\"'+reader.result+'\" download=\"'+fname+'\" style=\"font-size:16px;color:#1F3864;font-weight:bold\">⬇ '+fname+'</a></p>');}else{alert('ポップアップを許可してください');}};
+    reader.readAsDataURL(blob);return;
+  }
+  var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=fname;document.body.appendChild(a);a.click();setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+}
+</script>
+</body>
+</html>
